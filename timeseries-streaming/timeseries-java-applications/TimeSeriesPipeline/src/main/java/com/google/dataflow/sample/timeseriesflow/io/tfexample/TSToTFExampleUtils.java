@@ -110,9 +110,6 @@ public class TSToTFExampleUtils {
    *
    * <p>Metadata
    *
-   * <p>{@link ExampleMetadata#METADATA_MAJOR_KEY} Corresponds to the major key provided by the
-   * {@LINK TSKey}
-   *
    * <p>{@link ExampleMetadata#METADATA_SPAN_END_TS} Maximum timestamp of the span which the Example
    * covers
    *
@@ -129,7 +126,7 @@ public class TSToTFExampleUtils {
    * the TFX library soon.
    */
   public static class FeaturesFromIterableAccumSequence
-      extends PTransform<PCollection<KV<TSKey, Iterable<TSAccumSequence>>>, PCollectionTuple> {
+      extends PTransform<PCollection<Iterable<TSAccumSequence>>, PCollectionTuple> {
 
     public TupleTag<Example> names;
     public TupleTag<Example> examples;
@@ -154,7 +151,7 @@ public class TSToTFExampleUtils {
     }
 
     @Override
-    public PCollectionTuple expand(PCollection<KV<TSKey, Iterable<TSAccumSequence>>> input) {
+    public PCollectionTuple expand(PCollection<Iterable<TSAccumSequence>> input) {
 
       return input.apply(
           ParDo.of(new ConvertAllKeyFeaturesToSingleExample(this))
@@ -162,7 +159,7 @@ public class TSToTFExampleUtils {
     }
 
     public static class ConvertAllKeyFeaturesToSingleExample
-        extends DoFn<KV<TSKey, Iterable<TSAccumSequence>>, Example> {
+        extends DoFn<Iterable<TSAccumSequence>, Example> {
 
       List<WindowedValue<Example>> featureNames;
 
@@ -193,7 +190,7 @@ public class TSToTFExampleUtils {
 
       @ProcessElement
       public void process(
-          @Element KV<TSKey, Iterable<TSAccumSequence>> accumsSequence,
+          @Element Iterable<TSAccumSequence> accumsSequence,
           @Timestamp Instant timestamp,
           BoundedWindow window,
           ProcessContext pc,
@@ -228,8 +225,7 @@ public class TSToTFExampleUtils {
 
     /** Returns {@link Features} with order based on sequence time boundaries */
     public static Features convertAllKeyFeaturesToSingleExample(
-        KV<TSKey, Iterable<TSAccumSequence>> accums, Integer timesteps)
-        throws UnsupportedEncodingException {
+        Iterable<TSAccumSequence> accums, Integer timesteps) throws UnsupportedEncodingException {
 
       LOG.warn("Any double types will be coerced to Float feature.");
 
@@ -243,7 +239,7 @@ public class TSToTFExampleUtils {
       // We have multi array of TSAccumSequence, every Sequence is 'feature' as its a different
       // minor key Step We need to convert every TSAccumSequence to an array of [Feature[]]
 
-      for (TSAccumSequence accumSequence : accums.getValue()) {
+      for (TSAccumSequence accumSequence : accums) {
         String featureName = accumSequence.getKey().getMinorKeyString();
 
         addNumericFeatures(featureName, features, accumSequence);
@@ -257,15 +253,6 @@ public class TSToTFExampleUtils {
             Optional.ofNullable(lowerBoundary)
                 .orElse(Timestamps.toMillis(accumSequence.getLowerWindowBoundary()));
       }
-
-      // Add all Metadata
-      features.putFeature(
-          ExampleMetadata.METADATA_MAJOR_KEY.name(),
-          Feature.newBuilder()
-              .setBytesList(
-                  BytesList.newBuilder()
-                      .addValue(ByteString.copyFrom(accums.getKey().getMajorKey(), "UTF-8")))
-              .build());
 
       // Set these only once...
       features.putFeature(
@@ -596,8 +583,7 @@ public class TSToTFExampleUtils {
    */
   @Experimental
   public static class ColoaseMajorKeyDataPointsToSingleTFExample
-      extends PTransform<
-          PCollection<KV<TSKey, Iterable<TSAccumSequence>>>, PCollection<KV<TSKey, Example>>> {
+      extends PTransform<PCollection<Iterable<TSAccumSequence>>, PCollection<KV<TSKey, Example>>> {
 
     private static final Logger LOG =
         LoggerFactory.getLogger(ColoaseMajorKeyDataPointsToSingleTFExample.class);
@@ -618,8 +604,7 @@ public class TSToTFExampleUtils {
     }
 
     @Override
-    public PCollection<KV<TSKey, Example>> expand(
-        PCollection<KV<TSKey, Iterable<TSAccumSequence>>> input) {
+    public PCollection<KV<TSKey, Example>> expand(PCollection<Iterable<TSAccumSequence>> input) {
 
       PCollectionTuple exampleAndMetadata = input.apply(createFeaturesFromIterableAccum(timesteps));
 
