@@ -63,179 +63,182 @@ import java.util.Optional;
  */
 public class SimpleDataStreamGenerator {
 
-  private static final String PUBSUB_ID_ATTRIBUTE = "item_id";
+    private static final String PUBSUB_ID_ATTRIBUTE = "item_id";
 
-  public static void main(String[] args) {
+    public static void main(String[] args) {
 
-    /**
-     * ***********************************************************************************************************
-     * We hard code a few of the options for this sample application.
-     * ***********************************************************************************************************
-     */
-    SimpleDataOptions options = PipelineOptionsFactory.fromArgs(args).as(SimpleDataOptions.class);
+        /**
+         * ***********************************************************************************************************
+         * We hard code a few of the options for this sample application.
+         * ***********************************************************************************************************
+         */
+        SimpleDataOptions options = PipelineOptionsFactory.fromArgs(args).as(SimpleDataOptions.class);
 
-    Preconditions.checkArgument(
-        ImmutableList.of("example_1", "example_2", "example_3", "example_4")
-            .contains(Optional.ofNullable(options.getDemoMode()).orElse("")),
-        "--demoMode must be set to one of example_1, example_2, example_3, example_4");
+        Preconditions.checkArgument(
+            ImmutableList.of("example_1", "example_2", "example_3", "example_4")
+                .contains(Optional.ofNullable(options.getDemoMode()).orElse("")),
+            "--demoMode must be set to one of example_1, example_2, example_3, example_4");
 
-    options.setAppName("SimpleDataStreamTSDataPoints");
-    options.setTypeOneComputationsLengthInSecs(1);
-    options.setTypeTwoComputationsLengthInSecs(5);
-    options.setSequenceLengthInSeconds(5);
+        options.setAppName("SimpleDataStreamTSDataPoints");
+        options.setTypeOneComputationsLengthInSecs(1);
+        options.setTypeTwoComputationsLengthInSecs(5);
+        options.setSequenceLengthInSeconds(5);
 
-    Pipeline p = Pipeline.create(options);
+        Pipeline p = Pipeline.create(options);
 
-    /**
-     * ***********************************************************************************************************
-     * We want to ensure that there is always a value within each timestep. This is redundant for
-     * this dataset as the generated data will always have a value. But we keep this configuration
-     * to ensure consistency across the sample pipelines.
-     * ***********************************************************************************************************
-     */
-    PerfectRectangles perfectRectangles =
-        PerfectRectangles.builder()
-            .setEnableHoldAndPropogate(false)
-            .setFixedWindow(Duration.standardSeconds(1))
-            .setTtlDuration(Duration.standardSeconds(5))
-            .build();
+        /**
+         * ***********************************************************************************************************
+         * We want to ensure that there is always a value within each timestep. This is redundant for
+         * this dataset as the generated data will always have a value. But we keep this configuration
+         * to ensure consistency across the sample pipelines.
+         * ***********************************************************************************************************
+         */
+        PerfectRectangles perfectRectangles =
+            PerfectRectangles.builder()
+                .setEnableHoldAndPropogate(false)
+                .setFixedWindow(Duration.standardSeconds(1))
+                .setTtlDuration(Duration.standardSeconds(5))
+                .build();
 
-    /**
-     * ***********************************************************************************************************
-     * The data has only one key, to allow the type 1 computations to be done in parallel we set the
-     * {@link GenerateComputations#hotKeyFanOut()}
-     * ***********************************************************************************************************
-     */
-    GenerateComputations generateComputations =
-        AllMetricsGeneratorWithDefaults.getGenerateComputationsWithAllKnownMetrics()
-            .setType1FixedWindow(Duration.standardSeconds(1))
-            .setType2SlidingWindowDuration(Duration.standardSeconds(5))
-            .setHotKeyFanOut(5)
-            .setPerfectRectangles(perfectRectangles)
-            .build();
+        /**
+         * ***********************************************************************************************************
+         * The data has only one key, to allow the type 1 computations to be done in parallel we set the
+         * {@link GenerateComputations#hotKeyFanOut()}
+         * ***********************************************************************************************************
+         */
+        GenerateComputations generateComputations =
+            AllMetricsGeneratorWithDefaults.getGenerateComputationsWithAllKnownMetrics()
+                .setType1FixedWindow(Duration.standardSeconds(1))
+                .setType2SlidingWindowDuration(Duration.standardSeconds(5))
+                .setHotKeyFanOut(5)
+                .setPerfectRectangles(perfectRectangles)
+                .build();
 
-    /**
-     * ***********************************************************************************************************
-     * Generate trivial data points that follow a very simple pattern. Over 12 hours the value will
-     * cycle through 0 up and then back to 0. There will be a tick every 500 ms.
-     * ***********************************************************************************************************
-     */
-    TSKey key = TSKey.newBuilder().setMajorKey("timeseries_x").setMinorKeyString("value").build();
+        /**
+         * ***********************************************************************************************************
+         * Generate trivial data points that follow a very simple pattern. Over 12 hours the value will
+         * cycle through 0 up and then back to 0. There will be a tick every 500 ms.
+         * ***********************************************************************************************************
+         */
+        TSKey key = TSKey.newBuilder().setMajorKey("timeseries_x").setMinorKeyString("value").build();
 
-    boolean outlierEnabled = Optional.ofNullable(options.getWithOutliers()).orElse(false);
+        boolean outlierEnabled = Optional.ofNullable(options.getWithOutliers()).orElse(false);
 
-    PCollection<TSDataPoint> stream = 
-        p.apply("PubSubListener" , PubsubIO.readStrings()
-        .fromSubscription("projects/band-etl-dev/subscriptions/metrics.test0")
-        .withIdAttribute(PUBSUB_ID_ATTRIBUTE))
-            .apply(
-                ParDo.of(
-                    new DoFn<String, TSDataPoint>() {
-                      @ProcessElement
-                      public void process(
-                          @Element String input,
-                          @Timestamp Instant now,
-                          OutputReceiver<TSDataPoint> o) {
+        PCollection<TSDataPoint> stream =
+            p.apply("PubSubListener", PubsubIO.readStrings()
+                .fromSubscription("projects/band-etl-dev/subscriptions/metrics.test0")
+                .withIdAttribute(PUBSUB_ID_ATTRIBUTE))
+                .apply(
+                    ParDo.of(
+                        new DoFn<String, TSDataPoint>() {
+                            @ProcessElement
+                            public void process(
+                                @Element String input,
+                                @Timestamp Instant now,
+                                OutputReceiver<TSDataPoint> o) {
 
-                        OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
-                        System.out.println(oracleRequest.getOracle_request_id());
-                        
-                        // TODO:
-                        o.output(
-                            TSDataPoint.newBuilder()
-                                .setKey(key)
-                                .setData(
-                                    Data.newBuilder()
-                                        .setDoubleVal(
-                                            Math.round(
-                                                Math.sin(Math.toRadians(1 % 360))
-                                                    * 10000D)
-                                                / 100D))
-                                .setTimestamp(Timestamps.fromMillis(now.getMillis()))
-                                .build());
-                      }
-                    }));
-    
-    /**
-     * ***********************************************************************************************************
-     * All the metrics currently available will be processed for this dataset. The results will be
-     * sent to two difference locations: To Google BigQuery as defined by: {@link
-     * ExampleTimeseriesPipelineOptions#getBigQueryTableForTSAccumOutputLocation()} To a Google
-     * Cloud Storage Bucket as defined by: {@link
-     * ExampleTimeseriesPipelineOptions#getInterchangeLocation()} The TFExamples will be grouped
-     * into TFRecord files as {@link OutPutTFExampleFromTSSequence#enableSingleWindowFile} is set to
-     * false.
-     *
-     * <p>***********************************************************************************************************
-     */
-    AllComputationsExamplePipeline allComputationsExamplePipeline =
-        AllComputationsExamplePipeline.builder()
-            .setTimeseriesSourceName("SimpleExample")
-            .setOutputToBigQuery(false)
-            .setGenerateComputations(generateComputations)
-            .build();
+                                OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
+                                System.out.println(oracleRequest.getOracle_request_id());
 
-    if (options.getDemoMode().equals("example_3")) {
-      allComputationsExamplePipeline =
-          allComputationsExamplePipeline.toBuilder().setOutputToBigQuery(true).build();
+                                // TODO:
+                                o.output(
+                                    TSDataPoint.newBuilder()
+                                        .setKey(key)
+                                        .setData(
+                                            Data.newBuilder()
+                                                .setDoubleVal(
+                                                    Math.round(
+                                                        Math.sin(Math.toRadians(1 % 360))
+                                                            * 10000D)
+                                                        / 100D))
+                                        .setTimestamp(Timestamps.fromMillis(now.getMillis()))
+                                        .build());
+                            }
+                        }));
+
+        /**
+         * ***********************************************************************************************************
+         * All the metrics currently available will be processed for this dataset. The results will be
+         * sent to two difference locations: To Google BigQuery as defined by: {@link
+         * ExampleTimeseriesPipelineOptions#getBigQueryTableForTSAccumOutputLocation()} To a Google
+         * Cloud Storage Bucket as defined by: {@link
+         * ExampleTimeseriesPipelineOptions#getInterchangeLocation()} The TFExamples will be grouped
+         * into TFRecord files as {@link OutPutTFExampleFromTSSequence#enableSingleWindowFile} is set to
+         * false.
+         *
+         * <p
+         * >***********************************************************************************************************
+         */
+        AllComputationsExamplePipeline allComputationsExamplePipeline =
+            AllComputationsExamplePipeline.builder()
+                .setTimeseriesSourceName("SimpleExample")
+                .setOutputToBigQuery(false)
+                .setGenerateComputations(generateComputations)
+                .build();
+
+        if (options.getDemoMode().equals("example_3")) {
+            allComputationsExamplePipeline =
+                allComputationsExamplePipeline.toBuilder().setOutputToBigQuery(true).build();
+        }
+
+        PCollection<KV<TSKey, Iterable<TSAccumSequence>>> metrics =
+            stream.apply(allComputationsExamplePipeline);
+
+        /**
+         * ***********************************************************************************************************
+         * Example_1
+         *
+         * <p>For demo purposes the values are also sent out to LOG.
+         *
+         * <p
+         * >***********************************************************************************************************
+         */
+        if (options.getDemoMode().equals("example_1")) {
+            metrics.apply(Values.create()).apply(new Print<>());
+        }
+
+        /**
+         * ***********************************************************************************************************
+         * Example 2:
+         *
+         * <p>Files will be output to the file location specified.
+         *
+         * <p>Note : For processing of bootstrap history, do not use {@link
+         * OutPutTFExampleFromTSSequence#withEnabledSingeWindowFile(boolean)} set to true. This causes
+         * output file per type 1 window, which is inefficent when processing history of file, but fine
+         * in stream mode.
+         *
+         * <p
+         * >***********************************************************************************************************
+         */
+        if (options.getDemoMode().equals("example_2")) {
+            Preconditions.checkNotNull(
+                options.getInterchangeLocation(), "For example_2 you must provide --interchangeLocation");
+            System.out.println(
+                String.format(
+                    "Running Example 2, files will be output to %s", options.getInterchangeLocation()));
+            metrics
+                .apply(
+                    OutPutTFExampleFromTSSequence.create()
+                        .withEnabledSingeWindowFile(true)
+                        .setNumShards(2))
+                .apply(new Print<Example>());
+        }
+
+        if (options.getDemoMode().equals("example_4")) {
+            Preconditions.checkNotNull(
+                options.getPubSubTopicForTSAccumOutputLocation(),
+                "For this example you must set the --pubSubTopicForTSAccumOutputLocation option");
+            System.out.println(
+                String.format(
+                    "Running Example 4, protos will be output to %s",
+                    options.getPubSubTopicForTSAccumOutputLocation()));
+            metrics.apply(
+                OutPutTFExampleFromTSSequence.create()
+                    .withPubSubTopic(options.getPubSubTopicForTSAccumOutputLocation())
+                    .setNumShards(2));
+        }
+
+        p.run();
     }
-
-    PCollection<KV<TSKey, Iterable<TSAccumSequence>>> metrics =
-        stream.apply(allComputationsExamplePipeline);
-
-    /**
-     * ***********************************************************************************************************
-     * Example_1
-     *
-     * <p>For demo purposes the values are also sent out to LOG.
-     *
-     * <p>***********************************************************************************************************
-     */
-    if (options.getDemoMode().equals("example_1")) {
-      metrics.apply(Values.create()).apply(new Print<>());
-    }
-
-    /**
-     * ***********************************************************************************************************
-     * Example 2:
-     *
-     * <p>Files will be output to the file location specified.
-     *
-     * <p>Note : For processing of bootstrap history, do not use {@link
-     * OutPutTFExampleFromTSSequence#withEnabledSingeWindowFile(boolean)} set to true. This causes
-     * output file per type 1 window, which is inefficent when processing history of file, but fine
-     * in stream mode.
-     *
-     * <p>***********************************************************************************************************
-     */
-    if (options.getDemoMode().equals("example_2")) {
-      Preconditions.checkNotNull(
-          options.getInterchangeLocation(), "For example_2 you must provide --interchangeLocation");
-      System.out.println(
-          String.format(
-              "Running Example 2, files will be output to %s", options.getInterchangeLocation()));
-      metrics
-          .apply(
-              OutPutTFExampleFromTSSequence.create()
-                  .withEnabledSingeWindowFile(true)
-                  .setNumShards(2))
-          .apply(new Print<Example>());
-    }
-
-    if (options.getDemoMode().equals("example_4")) {
-      Preconditions.checkNotNull(
-          options.getPubSubTopicForTSAccumOutputLocation(),
-          "For this example you must set the --pubSubTopicForTSAccumOutputLocation option");
-      System.out.println(
-          String.format(
-              "Running Example 4, protos will be output to %s",
-              options.getPubSubTopicForTSAccumOutputLocation()));
-      metrics.apply(
-          OutPutTFExampleFromTSSequence.create()
-              .withPubSubTopic(options.getPubSubTopicForTSAccumOutputLocation())
-              .setNumShards(2));
-    }
-
-    p.run();
-  }
 }
