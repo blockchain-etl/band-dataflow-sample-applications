@@ -16,6 +16,9 @@ public class OracleRequest {
     private Long oracle_request_id;
 
     @Nullable
+    private String block_timestamp;
+
+    @Nullable
     private DecodedResult decoded_result;
 
     public OracleRequest() {}
@@ -26,6 +29,14 @@ public class OracleRequest {
 
     public void setOracle_request_id(Long oracle_request_id) {
         this.oracle_request_id = oracle_request_id;
+    }
+
+    public String getBlock_timestamp() {
+        return block_timestamp;
+    }
+
+    public void setBlock_timestamp(String block_timestamp) {
+        this.block_timestamp = block_timestamp;
     }
 
     public DecodedResult getDecoded_result() {

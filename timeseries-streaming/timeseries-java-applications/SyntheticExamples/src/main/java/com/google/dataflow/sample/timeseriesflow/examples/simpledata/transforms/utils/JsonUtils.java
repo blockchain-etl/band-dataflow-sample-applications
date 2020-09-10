@@ -17,6 +17,15 @@ public class JsonUtils {
         }
     }
 
+    public static String toJson(Object msg) {
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            return mapper.writeValueAsString(msg);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static <T> T parseJson(String s, Class<T> clazz) {
         ObjectMapper mapper = new ObjectMapper();
         try {

@@ -19,7 +19,6 @@ package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms
 
 import com.google.common.base.Preconditions;
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.Data;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSAccumSequence;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSKey;
@@ -29,7 +28,6 @@ import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleFro
 import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsGeneratorWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
-import com.google.protobuf.util.Timestamps;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
@@ -96,8 +94,8 @@ public class SimpleDataStreamGenerator {
         PerfectRectangles perfectRectangles =
             PerfectRectangles.builder()
                 .setEnableHoldAndPropogate(false)
-                .setFixedWindow(Duration.standardSeconds(1))
-                .setTtlDuration(Duration.standardSeconds(5))
+                .setFixedWindow(Duration.standardMinutes(10))
+                .setTtlDuration(Duration.standardMinutes(60))
                 .build();
 
         /**
@@ -108,8 +106,8 @@ public class SimpleDataStreamGenerator {
          */
         GenerateComputations generateComputations =
             AllMetricsGeneratorWithDefaults.getGenerateComputationsWithAllKnownMetrics()
-                .setType1FixedWindow(Duration.standardSeconds(1))
-                .setType2SlidingWindowDuration(Duration.standardSeconds(5))
+                .setType1FixedWindow(Duration.standardMinutes(10))
+                .setType2SlidingWindowDuration(Duration.standardMinutes(60))
                 .setHotKeyFanOut(5)
                 .setPerfectRectangles(perfectRectangles)
                 .build();
@@ -138,21 +136,14 @@ public class SimpleDataStreamGenerator {
                                 OutputReceiver<TSDataPoint> o) {
 
                                 OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
-                                System.out.println(oracleRequest.getOracle_request_id());
-
-                                // TODO:
-                                o.output(
-                                    TSDataPoint.newBuilder()
-                                        .setKey(key)
-                                        .setData(
-                                            Data.newBuilder()
-                                                .setDoubleVal(
-                                                    Math.round(
-                                                        Math.sin(Math.toRadians(1 % 360))
-                                                            * 10000D)
-                                                        / 100D))
-                                        .setTimestamp(Timestamps.fromMillis(now.getMillis()))
-                                        .build());
+                                if (oracleRequest.getDecoded_result() != null &&
+                                    oracleRequest.getDecoded_result().getCalldata() != null &&
+                                    oracleRequest.getDecoded_result().getResult() != null) {
+                                    for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(
+                                        oracleRequest)) {
+                                        o.output(tsDataPoint);
+                                    }
+                                }
                             }
                         }));
 
