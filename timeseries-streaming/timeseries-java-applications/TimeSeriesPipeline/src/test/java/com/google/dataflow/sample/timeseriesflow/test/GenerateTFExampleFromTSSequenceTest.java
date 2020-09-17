@@ -15,26 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dataflow.sample.timeseriesflow;
+package com.google.dataflow.sample.timeseriesflow.test;
 
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.Data;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSAccum;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSAccumSequence;
-import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSToTFExampleUtils;
-import com.google.protobuf.ByteString;
+import com.google.dataflow.sample.timeseriesflow.io.tfexample.FeaturesFromIterableAccumSequence;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.GroupByKey;
+import org.apache.beam.sdk.transforms.Values;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.junit.Rule;
 import org.junit.Test;
-import org.tensorflow.example.BytesList;
 import org.tensorflow.example.Example;
 import org.tensorflow.example.Feature;
 import org.tensorflow.example.Features;
@@ -47,7 +46,7 @@ public class GenerateTFExampleFromTSSequenceTest {
   @Rule public final transient TestPipeline p = TestPipeline.create();
 
   @Test
-  /* Simple test to check values are processed from TSAccum -> TSAccumeSequence Correctly */
+  /* Simple test to check values are processed from TSAccumSequence -> TF.Example Correctly */
   public void testCreateTSExampleFromTSAccumSequence() {
 
     TSAccum first =
@@ -99,31 +98,26 @@ public class GenerateTFExampleFromTSSequenceTest {
                             .setCount(3)
                             .build())))
             .apply(GroupByKey.create())
-            .apply(TSToTFExampleUtils.createFeaturesFromIterableAccum(3));
+            .apply(Values.create())
+            .apply(new FeaturesFromIterableAccumSequence(3));
 
-    PAssert.that(examples.get(TSToTFExampleUtils.TIME_SERIES_EXAMPLES))
+    PAssert.that(examples.get(FeaturesFromIterableAccumSequence.TIME_SERIES_EXAMPLES))
         .containsInAnyOrder(
             Example.newBuilder()
                 .setFeatures(
                     Features.newBuilder()
                         .putFeature(
-                            TSDataTestUtils.KEY_A_A.getMinorKeyString() + "-feature_a",
+                            String.join(
+                                "-",
+                                TSDataTestUtils.KEY_A_A.getMajorKey(),
+                                TSDataTestUtils.KEY_A_A.getMinorKeyString(),
+                                "feature_a"),
                             Feature.newBuilder()
                                 .setFloatList(
                                     FloatList.newBuilder()
                                         .addValue(1F)
                                         .addValue(3F)
                                         .addValue(2F)
-                                        .build())
-                                .build())
-                        .putFeature(
-                            "METADATA_MAJOR_KEY",
-                            Feature.newBuilder()
-                                .setBytesList(
-                                    BytesList.newBuilder()
-                                        .addValue(
-                                            ByteString.copyFromUtf8(
-                                                TSDataTestUtils.KEY_A_A.getMajorKey()))
                                         .build())
                                 .build())
                         .putFeature(
