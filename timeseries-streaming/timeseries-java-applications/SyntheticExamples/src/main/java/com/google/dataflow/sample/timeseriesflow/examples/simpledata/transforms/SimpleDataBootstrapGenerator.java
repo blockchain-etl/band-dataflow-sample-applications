@@ -21,10 +21,10 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
 import com.google.dataflow.sample.timeseriesflow.ExampleTimeseriesPipelineOptions;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.OracleRequest;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.JsonUtils;
-import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleFromTSSequence;
-import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsGeneratorWithDefaults;
+import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSKey;
+import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
+import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
+import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
 import org.apache.beam.sdk.Pipeline;
@@ -46,34 +46,35 @@ import org.joda.time.Duration;
 public class SimpleDataBootstrapGenerator {
 
   public static void main(String[] args) {
-    
-    /**
-     * ***********************************************************************************************************
-     * We want to ensure that there is always a value within each timestep. This is redundent for
-     * this dataset as the generated data will always have a value. But we keep this configuration
-     * to ensure consistency accross the sample pipelines.
-     * ***********************************************************************************************************
-     */
-    PerfectRectangles perfectRectangles =
-        PerfectRectangles.builder()
-            .setEnableHoldAndPropogate(false)
-            .setFixedWindow(Duration.standardMinutes(10))
-            .setTtlDuration(Duration.standardMinutes(60))
-            .build();
+
+    // The starting time for the bootstrap data is unimportant for this dataset as the data function
+    // is always the same.
+    Instant now = Instant.parse("2000-01-01T00:00:00");
+
+    List<TimestampedValue<TSDataPoint>> data = new ArrayList<>();
+
+    TSKey key = TSKey.newBuilder().setMajorKey("timeseries_x").setMinorKeyString("value").build();
 
     /**
      * ***********************************************************************************************************
-     * The data has only one key, to allow the type 1 computations to be done in parrallal we set
-     * the {@link GenerateComputations#hotKeyFanOut()}
+     * Generate trivial data points that follow a very simple pattern. Over 12 hours the value will
+     * cycle through 0 to x and back to 0. There will be a tick every 500 ms.
      * ***********************************************************************************************************
      */
-    GenerateComputations generateComputations =
-        AllMetricsGeneratorWithDefaults.getGenerateComputationsWithAllKnownMetrics()
-            .setType1FixedWindow(Duration.standardMinutes(10))
-            .setType2SlidingWindowDuration(Duration.standardMinutes(60))
-            .setHotKeyFanOut(5)
-            .setPerfectRectangles(perfectRectangles)
-            .build();
+    for (int i = 0; i < 86400; i++) {
+      data.add(
+          TimestampedValue.of(
+              TSDataPoint.newBuilder()
+                  .setKey(key)
+                  .setData(
+                      Data.newBuilder()
+                          .setDoubleVal(
+                              Math.round(Math.sin(Math.toRadians(i % 360)) * 10000D) / 100D))
+                  .setTimestamp(
+                      Timestamps.fromMillis(now.plus(Duration.millis(i * 500)).getMillis()))
+                  .build(),
+              now.plus(Duration.millis(i * 500))));
+    }
 
     ExampleTimeseriesPipelineOptions options =
         PipelineOptionsFactory.fromArgs(args).as(ExampleTimeseriesPipelineOptions.class);
@@ -87,41 +88,31 @@ public class SimpleDataBootstrapGenerator {
     options.setTypeOneComputationsLengthInSecs(1);
     options.setTypeTwoComputationsLengthInSecs(5);
     options.setSequenceLengthInSeconds(5);
-//    options.setRunner(DataflowRunner.class);
-//    options.setMaxNumWorkers(2);
+    options.setRunner(DataflowRunner.class);
+    options.setMaxNumWorkers(2);
+    options.setAbsoluteStopTimeMSTimestamp(now.plus(Duration.standardSeconds(43200)).getMillis());
 
     Pipeline p = Pipeline.create(options);
 
-    
-    PCollection<TSDataPoint> data =
-        p
-            .apply(
-                "ReadBigQuery",
-                BigQueryIO.readTableRows()
-                    .fromQuery("SELECT block_timestamp, oracle_request_id, decoded_result " 
-                        + "FROM `band-etl-dev.crypto_band.oracle_requests` " 
-                        + "WHERE request.oracle_script_id = 8 ")
-                    .withQueryPriority(BigQueryIO.TypedRead.QueryPriority.INTERACTIVE)
-                    .usingStandardSql())
-            .apply(ParDo.of(
-                new DoFn<TableRow, TSDataPoint>() {
-                  @ProcessElement
-                  public void process(
-                      @Element TableRow input,
-                      OutputReceiver<TSDataPoint> o) {
+    /**
+     * ***********************************************************************************************************
+     * The data has only one key, to allow the type 1 computations to be done in parallel we set the
+     * {@link GenerateComputations#hotKeyFanOut()}
+     * ***********************************************************************************************************
+     */
+    GenerateComputations.Builder generateComputations =
+        GenerateComputations.fromPiplineOptions(options)
+            .setType1NumericComputations(AllMetricsWithDefaults.getAllType1Combiners())
+            .setType2NumericComputations(AllMetricsWithDefaults.getAllType2Computations());
 
-                    // This is not efficient, convert from TableRow instead.
-                    OracleRequest oracleRequest = JsonUtils.parseJson(JsonUtils.toJson(input), OracleRequest.class);
-                    if (oracleRequest.getDecoded_result() != null &&
-                        oracleRequest.getDecoded_result().getCalldata() != null &&
-                        oracleRequest.getDecoded_result().getResult() != null) {
-                      for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(
-                          oracleRequest)) {
-                        o.output(tsDataPoint);
-                      }
-                    }
-                  }
-                }));
+    /**
+     * ***********************************************************************************************************
+     * We want to ensure that there is always a value within each timestep. This is redundant for
+     * this dataset as the generated data will always have a value. But we keep this configuration
+     * to ensure consistency across the sample pipelines.
+     * ***********************************************************************************************************
+     */
+    generateComputations.setPerfectRectangles(PerfectRectangles.fromPipelineOptions(options));
 
     /**
      * ***********************************************************************************************************
@@ -135,14 +126,28 @@ public class SimpleDataBootstrapGenerator {
      *
      * <p>***********************************************************************************************************
      */
-    data
-        .apply(
-            AllComputationsExamplePipeline.builder()
-                .setTimeseriesSourceName("SimpleExample")
-                .setOutputToBigQuery(false)
-                .setGenerateComputations(generateComputations)
-                .build())
-        .apply(OutPutTFExampleFromTSSequence.create().withEnabledSingeWindowFile(false));
+    AllComputationsExamplePipeline allComputationsExamplePipeline =
+        AllComputationsExamplePipeline.builder()
+            .setTimeseriesSourceName("SimpleExample")
+            .setGenerateComputations(generateComputations.build())
+            .build();
+
+    /**
+     * ***********************************************************************************************************
+     * All the metrics currently available will be processed for this dataset. The results will be
+     * sent to two difference locations: To Google BigQuery as defined by: {@link
+     * ExampleTimeseriesPipelineOptions#getBigQueryTableForTSAccumOutputLocation()} To a Google
+     * Cloud Storage Bucket as defined by: {@link
+     * ExampleTimeseriesPipelineOptions#getInterchangeLocation()} The TFExamples will be grouped
+     * into TFRecord files as {@link OutPutTFExampleFromTSSequence#enableSingleWindowFile} is set to
+     * false.
+     *
+     * <p>***********************************************************************************************************
+     */
+    p.apply(Create.timestamped(data))
+        .apply(allComputationsExamplePipeline)
+        .apply(new TSAccumIterableToTFExample())
+        .apply(OutPutTFExampleToFile.create().withEnabledSingeWindowFile(false));
 
     p.run();
   }
