@@ -18,28 +18,27 @@
 package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
 
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.Data;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSAccumSequence;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSKey;
+import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.OracleRequest;
+import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.JsonUtils;
+import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.TimeUtils;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToPubSub;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
 import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
-import com.google.protobuf.util.Timestamps;
-import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
 import org.apache.beam.sdk.Pipeline;
-import org.apache.beam.sdk.io.GenerateSequence;
+import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
-import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.tensorflow.example.Example;
+
+import java.time.ZonedDateTime;
 
 /**
  * This simple example data is used only to demonstrate the end to end data engineering of the
@@ -58,6 +57,8 @@ import org.tensorflow.example.Example;
  * <p>example_4: In this mode the metrics are generated and output to PubSub.
  */
 public class SimpleDataStreamGenerator {
+
+  private static final String PUBSUB_ID_ATTRIBUTE = "item_id";
 
   public static void main(String[] args) {
 
@@ -82,50 +83,29 @@ public class SimpleDataStreamGenerator {
      * cycle through 0 up and then back to 0. There will be a tick every 500 ms.
      * ***********************************************************************************************************
      */
-    TSKey key = TSKey.newBuilder().setMajorKey("timeseries_x").setMinorKeyString("value").build();
-
-    boolean outlierEnabled = Optional.ofNullable(options.getWithOutliers()).orElse(false);
 
     PCollection<TSDataPoint> stream =
-        p.apply(GenerateSequence.from(0).withRate(1, Duration.millis(500)))
+        p.apply("PubSubListener", PubsubIO.readStrings()
+            .fromSubscription("projects/band-etl-dev/subscriptions/metrics.test0")
+            .withIdAttribute(PUBSUB_ID_ATTRIBUTE))
             .apply(
                 ParDo.of(
-                    new DoFn<Long, TSDataPoint>() {
+                    new DoFn<String, TSDataPoint>() {
                       @ProcessElement
                       public void process(
-                          @Element Long input,
+                          @Element String input,
                           @Timestamp Instant now,
                           OutputReceiver<TSDataPoint> o) {
-                        // We use both 50 and 51 so LAST and FIRST values can become outliers
-                        boolean outlier = (outlierEnabled && (input % 50 == 0 || input % 51 == 0));
 
-                        if (outlier) {
-                          System.out.println(String.format("Outlier generated at %s", now));
-                          o.output(
-                              TSDataPoint.newBuilder()
-                                  .setKey(key)
-                                  .setData(
-                                      Data.newBuilder()
-                                          .setDoubleVal(
-                                              ThreadLocalRandom.current().nextDouble(105D, 200D)))
-                                  .setTimestamp(Timestamps.fromMillis(now.getMillis()))
-                                  // This metadata is not reported in this version of the sample.
-                                  .putMetadata("Bad Data", "YES!")
-                                  .build());
-
-                        } else {
-                          o.output(
-                              TSDataPoint.newBuilder()
-                                  .setKey(key)
-                                  .setData(
-                                      Data.newBuilder()
-                                          .setDoubleVal(
-                                              Math.round(
-                                                      Math.sin(Math.toRadians(input % 360))
-                                                          * 10000D)
-                                                  / 100D))
-                                  .setTimestamp(Timestamps.fromMillis(now.getMillis()))
-                                  .build());
+                        OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
+                        ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
+                        if (oracleRequest.getDecoded_result() != null &&
+                            oracleRequest.getDecoded_result().getCalldata() != null &&
+                            oracleRequest.getDecoded_result().getResult() != null) {
+                          for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(
+                              oracleRequest)) {
+                            o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
+                          }
                         }
                       }
                     }));
