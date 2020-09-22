@@ -22,7 +22,7 @@ import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 
 public interface SimpleDataOptions extends ExampleTimeseriesPipelineOptions {
-
+  
   @Description(
       "In order to see easy output of metrics for demos set this to true. This will result in all values being 'printed' to logs.")
   @Default.Boolean(false)

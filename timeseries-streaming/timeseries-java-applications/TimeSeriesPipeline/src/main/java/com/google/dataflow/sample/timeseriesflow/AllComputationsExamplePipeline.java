@@ -27,7 +27,6 @@ import com.google.dataflow.sample.timeseriesflow.transforms.ConvertAccumToSequen
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateMajorKeyWindowSnapshot;
 import com.google.dataflow.sample.timeseriesflow.transforms.TSAccumToRow;
-import java.util.Optional;
 import org.apache.beam.sdk.annotations.Experimental;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
@@ -39,7 +38,6 @@ import org.apache.beam.sdk.transforms.windowing.Window;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.Row;
-import org.joda.time.Instant;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 
@@ -95,12 +93,7 @@ public abstract class AllComputationsExamplePipeline
                   .useBeamSchema()
                   .withCreateDisposition(CreateDisposition.CREATE_IF_NEEDED)
                   .withWriteDisposition(WriteDisposition.WRITE_APPEND)
-                  .to(
-                      String.join(
-                          "_",
-                          options.getBigQueryTableForTSAccumOutputLocation(),
-                          Optional.of(getTimeseriesSourceName()).orElse(""),
-                          Instant.now().toString(formatter))));
+                  .to(options.getBigQueryTableForTSAccumOutputLocation()));
     }
 
     // ----------------- Create Window of ordered output sliding windows.

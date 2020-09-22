@@ -7,6 +7,9 @@ import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.
 import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.JsonUtils;
 import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.TimeUtils;
 import com.google.protobuf.util.Timestamps;
+import org.joda.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.ZonedDateTime;
@@ -15,7 +18,10 @@ import java.util.List;
 
 public class OracleRequestMapper {
 
-    public static List<TimeSeriesData.TSDataPoint> convertOracleRequestToTSDataPoint(OracleRequest oracleRequest) {
+    private static final Logger LOG = LoggerFactory.getLogger(OracleRequestMapper.class);
+
+    public static List<TimeSeriesData.TSDataPoint> convertOracleRequestToTSDataPoint(OracleRequest oracleRequest,
+        Instant now) {
         String calldata = oracleRequest.getDecoded_result().getCalldata();
         AggregatorCalldata decodedCalldata = JsonUtils.parseJson(calldata, AggregatorCalldata.class);
 
@@ -27,22 +33,26 @@ public class OracleRequestMapper {
             ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(
                 oracleRequest.getBlock_timestamp());
             
-            // TODO: Validate
-            for (int i = 0; i < decodedCalldata.getSymbols().size(); i++) {
-                String symbol = decodedCalldata.getSymbols().get(i);
-                BigDecimal rate = decodedResult.getRates().get(i);
+            if (decodedCalldata.getSymbols() == null || decodedResult.getRates() == null ||
+                decodedCalldata.getSymbols().size() != decodedResult.getRates().size()) {
+                LOG.error("calldata.symbols or result.rates are null or have different sizes.");
+            } else {
+                for (int i = 0; i < decodedCalldata.getSymbols().size(); i++) {
+                    String symbol = decodedCalldata.getSymbols().get(i);
+                    BigDecimal rate = decodedResult.getRates().get(i);
 
-                TimeSeriesData.TSKey key = TimeSeriesData.TSKey
-                    .newBuilder().setMajorKey(symbol).setMinorKeyString("value").build();
-                
-                out.add(
-                    TimeSeriesData.TSDataPoint.newBuilder()
-                        .setKey(key)
-                        .setData(
-                            TimeSeriesData.Data.newBuilder()
-                                .setDoubleVal(rate.doubleValue()))
-                        .setTimestamp(Timestamps.fromSeconds(zonedDateTime.toEpochSecond()))
-                        .build());
+                    TimeSeriesData.TSKey key = TimeSeriesData.TSKey
+                        .newBuilder().setMajorKey(symbol).setMinorKeyString("value").build();
+
+                    out.add(
+                        TimeSeriesData.TSDataPoint.newBuilder()
+                            .setKey(key)
+                            .setData(
+                                TimeSeriesData.Data.newBuilder()
+                                    .setDoubleVal(rate.doubleValue()))
+                            .setTimestamp(Timestamps.fromSeconds(now.getMillis() / 1000))
+                            .build());
+                }
             }
         }
         
