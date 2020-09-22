@@ -13,6 +13,9 @@ import java.util.StringJoiner;
 public class OracleRequest {
 
     @Nullable
+    private Long oracle_request_id;
+    
+    @Nullable
     private OracleRequestData request;
 
     @Nullable
@@ -22,6 +25,14 @@ public class OracleRequest {
     private DecodedResult decoded_result;
 
     public OracleRequest() {}
+
+    public Long getOracle_request_id() {
+        return oracle_request_id;
+    }
+
+    public void setOracle_request_id(Long oracle_request_id) {
+        this.oracle_request_id = oracle_request_id;
+    }
 
     public OracleRequestData getRequest() {
         return request;

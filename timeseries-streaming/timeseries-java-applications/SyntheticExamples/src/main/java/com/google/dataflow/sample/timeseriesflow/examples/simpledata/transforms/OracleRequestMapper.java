@@ -7,7 +7,6 @@ import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.
 import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.JsonUtils;
 import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.TimeUtils;
 import com.google.protobuf.util.Timestamps;
-import org.joda.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,8 +19,7 @@ public class OracleRequestMapper {
 
     private static final Logger LOG = LoggerFactory.getLogger(OracleRequestMapper.class);
 
-    public static List<TimeSeriesData.TSDataPoint> convertOracleRequestToTSDataPoint(OracleRequest oracleRequest,
-        Instant now) {
+    public static List<TimeSeriesData.TSDataPoint> convertOracleRequestToTSDataPoint(OracleRequest oracleRequest) {
         String calldata = oracleRequest.getDecoded_result().getCalldata();
         AggregatorCalldata decodedCalldata = JsonUtils.parseJson(calldata, AggregatorCalldata.class);
 
@@ -50,7 +48,7 @@ public class OracleRequestMapper {
                             .setData(
                                 TimeSeriesData.Data.newBuilder()
                                     .setDoubleVal(rate.doubleValue()))
-                            .setTimestamp(Timestamps.fromSeconds(now.getMillis() / 1000))
+                            .setTimestamp(Timestamps.fromSeconds(zonedDateTime.toEpochSecond()))
                             .build());
                 }
             }

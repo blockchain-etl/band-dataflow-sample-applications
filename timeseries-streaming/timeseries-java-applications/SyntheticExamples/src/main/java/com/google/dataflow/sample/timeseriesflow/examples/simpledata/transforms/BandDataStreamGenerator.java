@@ -18,7 +18,6 @@
 package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
 
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSAccumSequence;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
 import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.OracleRequest;
@@ -30,14 +29,17 @@ import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToT
 import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
-import com.google.protobuf.util.Timestamps;
+import org.apache.beam.runners.dataflow.DataflowRunner;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
+import org.joda.time.Duration;
 import org.joda.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tensorflow.example.Example;
 
 import java.time.ZonedDateTime;
@@ -47,6 +49,8 @@ import java.time.ZonedDateTime;
  * library from, timeseries pre-processing to model creation using TFX.
  */
 public class BandDataStreamGenerator {
+
+  private static final Logger LOG = LoggerFactory.getLogger(BandDataStreamGenerator.class);
 
   private static final String PUBSUB_ID_ATTRIBUTE = "item_id";
   private static final Long BAND_AGGREGATOR_ORACLE_SCRIPT_ID = 8L;
@@ -71,8 +75,11 @@ public class BandDataStreamGenerator {
       options.setSequenceLengthInSeconds(600);
     }
     if (options.getTTLDurationSecs() == null) {
-      options.setTTLDurationSecs(1);
+      options.setTTLDurationSecs(600);
     }
+
+    options.setRunner(DataflowRunner.class);
+    options.setMaxNumWorkers(1);
 
     Pipeline p = Pipeline.create(options);
 
@@ -82,8 +89,6 @@ public class BandDataStreamGenerator {
      * cycle through 0 up and then back to 0. There will be a tick every 500 ms.
      * ***********************************************************************************************************
      */
-
-    TimeSeriesData.TSKey key = TimeSeriesData.TSKey.newBuilder().setMajorKey("timeseries_x").setMinorKeyString("value").build();
 
     PCollection<TSDataPoint> stream =
         p.apply("PubSubListener", PubsubIO.readStrings()
@@ -95,34 +100,29 @@ public class BandDataStreamGenerator {
                       @ProcessElement
                       public void process(
                           @Element String input,
-                          @Timestamp Instant now,
                           OutputReceiver<TSDataPoint> o) {
 
                         OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
+                        
                         if (oracleRequest.getRequest() != null &&
                             BAND_AGGREGATOR_ORACLE_SCRIPT_ID.equals(oracleRequest.getRequest().getOracle_script_id())) {
+
+                          LOG.info("Oracle request with id " + oracleRequest.getOracle_request_id());
+
                           ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
                           if (oracleRequest.getDecoded_result() != null &&
                               oracleRequest.getDecoded_result().getCalldata() != null &&
                               oracleRequest.getDecoded_result().getResult() != null) {
-                            for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(
-                                oracleRequest, now)) {
-//                              o.output(tsDataPoint);
-                              o.output(
-                                  TSDataPoint.newBuilder()
-                                      .setKey(key)
-                                      .setData(
-                                          TimeSeriesData.Data.newBuilder()
-                                              .setDoubleVal(
-                                                  Math.round(
-                                                      Math.sin(Math.toRadians(240))
-                                                          * 10000D)
-                                                      / 100D))
-                                      .setTimestamp(Timestamps.fromMillis(now.getMillis()))
-                                      .build());
+                            for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(oracleRequest)) {
+                              o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
                             }
                           }
                         }
+                      }
+
+                      @Override
+                      public Duration getAllowedTimestampSkew() {
+                        return Duration.standardMinutes(5);
                       }
                     }));
 

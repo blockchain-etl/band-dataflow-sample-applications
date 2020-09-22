@@ -133,8 +133,7 @@ public class BandDataBootstrapGenerator {
                     if (oracleRequest.getDecoded_result() != null &&
                         oracleRequest.getDecoded_result().getCalldata() != null &&
                         oracleRequest.getDecoded_result().getResult() != null) {
-                      for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(
-                          oracleRequest, null)) {
+                      for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(oracleRequest)) {
                         o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
                       }
                     }
