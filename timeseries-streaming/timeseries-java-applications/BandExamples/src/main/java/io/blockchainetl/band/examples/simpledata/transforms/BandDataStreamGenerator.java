@@ -15,21 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
+package io.blockchainetl.band.examples.simpledata.transforms;
 
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSAccumSequence;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.OracleRequest;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.JsonUtils;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.TimeUtils;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToPubSub;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
 import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
-import org.apache.beam.runners.dataflow.DataflowRunner;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.JsonUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.TimeUtils;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
@@ -78,9 +77,6 @@ public class BandDataStreamGenerator {
       options.setTTLDurationSecs(600);
     }
 
-    options.setRunner(DataflowRunner.class);
-    options.setMaxNumWorkers(1);
-
     Pipeline p = Pipeline.create(options);
 
     /**
@@ -107,7 +103,7 @@ public class BandDataStreamGenerator {
                         if (oracleRequest.getRequest() != null &&
                             BAND_AGGREGATOR_ORACLE_SCRIPT_ID.equals(oracleRequest.getRequest().getOracle_script_id())) {
 
-                          LOG.info("Oracle request with id " + oracleRequest.getOracle_request_id());
+                          LOG.info("Processing oracle request with id " + oracleRequest.getOracle_request_id());
 
                           ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
                           if (oracleRequest.getDecoded_result() != null &&

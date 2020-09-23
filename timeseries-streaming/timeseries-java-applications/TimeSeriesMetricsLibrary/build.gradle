@@ -18,7 +18,7 @@
 plugins {
     id 'java'
     id 'idea'
-    id "com.diffplug.gradle.spotless" version "3.24.2"
+//    id "com.diffplug.gradle.spotless" version "3.24.2"
     id "com.google.protobuf" version "0.8.12"
 }
 
@@ -67,9 +67,9 @@ dependencies {
 }
 
 // Enable code formatting
-spotless {
-    java {
-        licenseHeaderFile '../Apache_Licence_For_Spotless'
-        googleJavaFormat('1.7')
-    }
-}
+//spotless {
+//    java {
+//        licenseHeaderFile '../Apache_Licence_For_Spotless'
+//        googleJavaFormat('1.7')
+//    }
+//}

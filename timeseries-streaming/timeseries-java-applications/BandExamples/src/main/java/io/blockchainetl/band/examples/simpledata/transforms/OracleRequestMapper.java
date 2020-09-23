@@ -1,11 +1,11 @@
-package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
+package io.blockchainetl.band.examples.simpledata.transforms;
 
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.AggregatorCalldata;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.AggregatorResult;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.OracleRequest;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.JsonUtils;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.TimeUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.AggregatorCalldata;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.AggregatorResult;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.JsonUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.TimeUtils;
 import com.google.protobuf.util.Timestamps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

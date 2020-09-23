@@ -1,4 +1,4 @@
-package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
+package io.blockchainetl.band.examples.simpledata.transforms;
 
 public interface BandDataOptions extends SimpleDataOptions {
 

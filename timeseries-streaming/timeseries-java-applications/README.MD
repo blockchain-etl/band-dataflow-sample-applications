@@ -39,7 +39,8 @@ Start the pipeline:
    
 ```     
 PROJECT=$(gcloud config get-value project 2> /dev/null)
-./gradlew run_example --args="\
+./gradlew run_band_example --args="\
+    --runner=DirectRunner \
     --enablePrintMetricsToLogs \
     --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.subscription0 \
     --typeOneComputationsLengthInSecs=5 \
@@ -75,7 +76,12 @@ Run the pipeline:
 ``` 
 PROJECT=$(gcloud config get-value project 2> /dev/null)   
 TOPIC_NAME=band_metrics
-./gradlew run_example --args="--bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME"
+./gradlew run_example --args="\
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
+    --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
+    --runner=DataflowRunner \
+    --maxNumWorkers=1 \
+"
 ```     
 
 You can observe the results by running the following SQL command in BigQuery.

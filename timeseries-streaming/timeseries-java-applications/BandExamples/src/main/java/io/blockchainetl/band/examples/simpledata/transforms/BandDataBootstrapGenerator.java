@@ -15,15 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
+package io.blockchainetl.band.examples.simpledata.transforms;
 
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
 import com.google.dataflow.sample.timeseriesflow.ExampleTimeseriesPipelineOptions;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain.OracleRequest;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.JsonUtils;
-import com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.utils.TimeUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.JsonUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.TimeUtils;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
 import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;

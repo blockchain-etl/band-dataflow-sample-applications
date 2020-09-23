@@ -1,4 +1,4 @@
-package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.domain;
+package io.blockchainetl.band.examples.simpledata.transforms.domain;
 
 import com.google.common.base.Objects;
 import org.apache.avro.reflect.Nullable;

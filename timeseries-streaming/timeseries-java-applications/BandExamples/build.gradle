@@ -15,9 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-rootProject.name = 'timeseries-java-applications'
+plugins {
+    id 'java'
+    id 'idea'
+}
 
-include 'TimeSeriesPipeline'
-include 'TimeSeriesMetricsLibrary'
-include 'SyntheticExamples'
-include 'BandExamples'
+sourceCompatibility = 1.8
+
+dependencies {
+    compile project(':TimeSeriesPipeline')
+    compile project(':TimeSeriesMetricsLibrary')
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
+
+task run_band_example(type: JavaExec) {
+    classpath sourceSets.main.runtimeClasspath
+    main = "io.blockchainetl.band.examples.simpledata.transforms.BandDataStreamGenerator"
+    group = "samples"
+}
+
+task generate_band_bootstrap_data(type: JavaExec) {
+    classpath sourceSets.main.runtimeClasspath
+    main = "io.blockchainetl.band.examples.simpledata.transforms.BandDataBootstrapGenerator"
+    group = "samples"
+}
