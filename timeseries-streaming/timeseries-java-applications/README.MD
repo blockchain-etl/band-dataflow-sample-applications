@@ -76,7 +76,8 @@ Run the pipeline:
 ``` 
 PROJECT=$(gcloud config get-value project 2> /dev/null)   
 TOPIC_NAME=band_metrics
-./gradlew run_example --args="\
+
+./gradlew run_band_example --args="\
     --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
     --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
     --runner=DataflowRunner \
@@ -112,3 +113,32 @@ ORDER BY
   lower_window_boundary,
   DATA.metric
 ```
+
+## Bootstrap of metrics to BigQuery
+
+The BandDataBootstrapGenerator pipeline allows you to calculate metrics for historical oracle requests.
+The data is sourced from `crypto_band.oracle_requests` table in BigQuery.
+
+Run the pipeline:
+
+``` 
+PROJECT=$(gcloud config get-value project 2> /dev/null) 
+TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"   
+DATASET_NAME=band_metrics
+  
+./gradlew generate_band_bootstrap_data --args="\
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
+    --timestampThreshold="$TIMESTAMP_THRESHOLD" \
+    --runner=DataflowRunner \
+    --tempLocation=gs://dataflow-temp0/temp \
+    --maxNumWorkers=1 \
+    --region=us-central1 \
+"
+```  
+
+Use the same `--timestampThreshold` and `--bigQueryTableForTSAccumOutputLocation` when 
+running the streaming `run_band_example` pipeline.  
+
+---
+
+For more example pipelines refer to this repository https://github.com/GoogleCloudPlatform/dataflow-sample-applications/tree/master/timeseries-streaming/timeseries-java-applications.

@@ -21,15 +21,14 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
 import com.google.dataflow.sample.timeseriesflow.ExampleTimeseriesPipelineOptions;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
-import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
-import io.blockchainetl.band.examples.simpledata.transforms.utils.JsonUtils;
-import io.blockchainetl.band.examples.simpledata.transforms.utils.TimeUtils;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
 import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
-import org.apache.beam.runners.dataflow.DataflowRunner;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.JsonUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.TimeUtils;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
@@ -40,33 +39,31 @@ import org.joda.time.Instant;
 
 import java.time.ZonedDateTime;
 
+import static io.blockchainetl.band.examples.simpledata.transforms.utils.BandUtils.setDefaultOptions;
+
 /**
  * This trivial example data is used only to demonstrate the end to end data engineering of the
  * library from, timeseries pre-processing to model creation using TFX.
- *
- * <p>The learning bootstrap data will predictably rise and fall with time.
- *
- * <p>Options that are required for the pipeline:
  */
 public class BandDataBootstrapGenerator {
 
+  public static final String BAND_ORACLE_REQUESTS_QUERY = 
+      "SELECT block_timestamp, oracle_request_id, request, decoded_result "
+      + "FROM `band-etl-dev.crypto_band.oracle_requests` "
+      + "WHERE request.oracle_script_id = 8 "
+      + "   AND block_timestamp_truncated < '%s' ";
+
   public static void main(String[] args) {
 
-    ExampleTimeseriesPipelineOptions options =
-        PipelineOptionsFactory.fromArgs(args).as(ExampleTimeseriesPipelineOptions.class);
-
-    /**
-     * ***********************************************************************************************************
-     * We hard code a few of the options for this sample application.
-     * ***********************************************************************************************************
-     */
-    options.setAppName("SimpleDataBootstrapProcessTSDataPoints");
-    options.setTypeOneComputationsLengthInSecs(600);
-    options.setTypeTwoComputationsLengthInSecs(3600);
-    options.setSequenceLengthInSeconds(3600);
-    options.setRunner(DataflowRunner.class);
-    options.setMaxNumWorkers(2);
-//    options.setAbsoluteStopTimeMSTimestamp(now.plus(Duration.standardSeconds(43200)).getMillis());
+    BandDataOptions options =
+        PipelineOptionsFactory.fromArgs(args).as(BandDataOptions.class);
+    
+    options.setAppName("BandDataBootstrapProcessTSDataPoints");
+    setDefaultOptions(options);
+    
+    if (options.getTimestampThreshold() == null) {
+      throw new IllegalArgumentException("timestampThreshold option is required.");
+    }
 
     Pipeline p = Pipeline.create(options);
 
@@ -104,7 +101,7 @@ public class BandDataBootstrapGenerator {
      */
     AllComputationsExamplePipeline allComputationsExamplePipeline =
         AllComputationsExamplePipeline.builder()
-            .setTimeseriesSourceName("SimpleExample")
+            .setTimeseriesSourceName("BandExample")
             .setGenerateComputations(generateComputations.build())
             .build();
 
@@ -113,11 +110,7 @@ public class BandDataBootstrapGenerator {
             .apply(
                 "ReadBigQuery",
                 BigQueryIO.readTableRows()
-                    .fromQuery("SELECT block_timestamp, oracle_request_id, decoded_result "
-                        + "FROM `band-etl-dev.crypto_band.oracle_requests` "
-                        + "WHERE request.oracle_script_id = 8 " 
-                        + "   AND DATE(block_timestamp_truncated) <= '2020-09-16' AND DATE(block_timestamp_truncated) >= '2020-09-15' " 
-                        + "ORDER BY block_timestamp_truncated")
+                    .fromQuery(String.format(BAND_ORACLE_REQUESTS_QUERY, options.getTimestampThreshold()))
                     .withQueryPriority(BigQueryIO.TypedRead.QueryPriority.INTERACTIVE)
                     .usingStandardSql())
             .apply(ParDo.of(
@@ -129,13 +122,9 @@ public class BandDataBootstrapGenerator {
 
                     // This is not efficient, convert from TableRow instead.
                     OracleRequest oracleRequest = JsonUtils.parseJson(JsonUtils.toJson(input), OracleRequest.class);
-                    ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
-                    if (oracleRequest.getDecoded_result() != null &&
-                        oracleRequest.getDecoded_result().getCalldata() != null &&
-                        oracleRequest.getDecoded_result().getResult() != null) {
-                      for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(oracleRequest)) {
-                        o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
-                      }
+                    for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoints(oracleRequest)) {
+                      ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
+                      o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
                     }
                   }
                 }));

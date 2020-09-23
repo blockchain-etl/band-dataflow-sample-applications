@@ -43,6 +43,8 @@ import org.tensorflow.example.Example;
 
 import java.time.ZonedDateTime;
 
+import static io.blockchainetl.band.examples.simpledata.transforms.utils.BandUtils.setDefaultOptions;
+
 /**
  * This simple example data is used only to demonstrate the end to end data engineering of the
  * library from, timeseries pre-processing to model creation using TFX.
@@ -52,7 +54,6 @@ public class BandDataStreamGenerator {
   private static final Logger LOG = LoggerFactory.getLogger(BandDataStreamGenerator.class);
 
   private static final String PUBSUB_ID_ATTRIBUTE = "item_id";
-  private static final Long BAND_AGGREGATOR_ORACLE_SCRIPT_ID = 8L;
 
   public static void main(String[] args) {
 
@@ -64,18 +65,7 @@ public class BandDataStreamGenerator {
     BandDataOptions options = PipelineOptionsFactory.fromArgs(args).as(BandDataOptions.class);
 
     options.setAppName("BandDataStreamTSDataPoints");
-    if (options.getTypeOneComputationsLengthInSecs() == null) {
-      options.setTypeOneComputationsLengthInSecs(600);
-    }
-    if (options.getTypeTwoComputationsLengthInSecs() == null) {
-      options.setTypeTwoComputationsLengthInSecs(3600);
-    }
-    if (options.getSequenceLengthInSeconds() == null) {
-      options.setSequenceLengthInSeconds(600);
-    }
-    if (options.getTTLDurationSecs() == null) {
-      options.setTTLDurationSecs(600);
-    }
+    setDefaultOptions(options);
 
     Pipeline p = Pipeline.create(options);
 
@@ -99,19 +89,20 @@ public class BandDataStreamGenerator {
                           OutputReceiver<TSDataPoint> o) {
 
                         OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
+                        ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
+                        boolean skip = false;
+                        if (options.getTimestampThreshold() != null) {
+                          ZonedDateTime thresholdZonedDateTime = TimeUtils.parseDateTime(options.getTimestampThreshold());
+                          
+                          if (zonedDateTime.isBefore(thresholdZonedDateTime)) {
+                            skip = true;
+                          }
+                        }
                         
-                        if (oracleRequest.getRequest() != null &&
-                            BAND_AGGREGATOR_ORACLE_SCRIPT_ID.equals(oracleRequest.getRequest().getOracle_script_id())) {
-
-                          LOG.info("Processing oracle request with id " + oracleRequest.getOracle_request_id());
-
-                          ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
-                          if (oracleRequest.getDecoded_result() != null &&
-                              oracleRequest.getDecoded_result().getCalldata() != null &&
-                              oracleRequest.getDecoded_result().getResult() != null) {
-                            for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoint(oracleRequest)) {
-                              o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
-                            }
+                        if (!skip) {
+                          for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoints(
+                              oracleRequest)) {
+                            o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
                           }
                         }
                       }
@@ -150,7 +141,7 @@ public class BandDataStreamGenerator {
      */
     AllComputationsExamplePipeline allComputationsExamplePipeline =
         AllComputationsExamplePipeline.builder()
-            .setTimeseriesSourceName("SimpleExample")
+            .setTimeseriesSourceName("BandExample")
             .setGenerateComputations(generateComputations.build())
             .build();
 
