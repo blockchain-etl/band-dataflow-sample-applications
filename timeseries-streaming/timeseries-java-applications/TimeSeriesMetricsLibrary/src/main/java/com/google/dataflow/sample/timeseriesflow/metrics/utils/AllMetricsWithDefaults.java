@@ -25,14 +25,15 @@ import com.google.dataflow.sample.timeseriesflow.combiners.typeone.TSNumericComb
 import com.google.dataflow.sample.timeseriesflow.metrics.BB;
 import com.google.dataflow.sample.timeseriesflow.metrics.MA;
 import com.google.dataflow.sample.timeseriesflow.metrics.RSI;
-import java.math.BigDecimal;
-import java.util.List;
 import org.apache.beam.sdk.annotations.Experimental;
 import org.apache.beam.sdk.transforms.Combine.CombineFn;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Wrapper class used to deploy pipelines with all available metrics. Currently includes:
@@ -63,17 +64,6 @@ public class AllMetricsWithDefaults {
         MA.toBuilder()
             .setAverageComputationMethod(MA.AverageComputationMethod.EXPONENTIAL_MOVING_AVERAGE)
             .setWeight(BigDecimal.valueOf(2D / (3D + 1D)))
-            .build()
-            .create(),
-        BB.toBuilder()
-            .setAverageComputationMethod(BB.AverageComputationMethod.EXPONENTIAL_MOVING_AVERAGE)
-            .setWeight(BigDecimal.valueOf(2D / (3D + 1D)))
-            .setDevFactor(2)
-            .build()
-            .create(),
-        BB.toBuilder()
-            .setAverageComputationMethod(BB.AverageComputationMethod.SIMPLE_MOVING_AVERAGE)
-            .setDevFactor(2)
             .build()
             .create());
   }

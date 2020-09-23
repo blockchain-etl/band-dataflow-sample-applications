@@ -67,7 +67,7 @@ The following examples will use resources on your Google Cloud Platform account,
 Create a BigQuery table:
 
 ```bash        
-DATASET_NAME=band_metrics
+DATASET_NAME=band_analytics
 bq --location=US mk --dataset $DATASET_NAME 
 ``` 
 
@@ -75,10 +75,13 @@ Run the pipeline:
 
 ``` 
 PROJECT=$(gcloud config get-value project 2> /dev/null)   
-TOPIC_NAME=band_metrics
+TOPIC_NAME=band_analytics.metrics
+DATASET_NAME=band_analytics
+TABLE_NAME=metrics
 
-./gradlew run_band_example --args="\
-    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
+./gradlew run_band_example --args="\     
+    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.subscription0 \
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
     --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
     --runner=DataflowRunner \
     --maxNumWorkers=1 \
@@ -124,7 +127,7 @@ Run the pipeline:
 ``` 
 PROJECT=$(gcloud config get-value project 2> /dev/null) 
 TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"   
-DATASET_NAME=band_metrics
+DATASET_NAME=band_analytics
   
 ./gradlew generate_band_bootstrap_data --args="\
     --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
