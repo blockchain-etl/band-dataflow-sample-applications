@@ -23,7 +23,6 @@ import com.google.dataflow.sample.timeseriesflow.ExampleTimeseriesPipelineOption
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
-import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
 import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
@@ -75,8 +74,8 @@ public class BandDataBootstrapGenerator {
      */
     GenerateComputations.Builder generateComputations =
         GenerateComputations.fromPiplineOptions(options)
-            .setType1NumericComputations(AllMetricsWithDefaults.getAllType1Combiners())
-            .setType2NumericComputations(AllMetricsWithDefaults.getAllType2Computations());
+            .setType1NumericComputations(BandMetrics.getAllType1Combiners())
+            .setType2NumericComputations(BandMetrics.getAllType2Computations());
 
     /**
      * ***********************************************************************************************************
