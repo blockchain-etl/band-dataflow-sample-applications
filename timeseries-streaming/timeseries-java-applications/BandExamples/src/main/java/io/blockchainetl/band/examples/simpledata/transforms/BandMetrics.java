@@ -48,17 +48,6 @@ public class BandMetrics {
             .setAverageComputationMethod(MA.AverageComputationMethod.EXPONENTIAL_MOVING_AVERAGE)
             .setWeight(BigDecimal.valueOf(2D / (3D + 1D)))
             .build()
-            .create(),
-        BB.toBuilder()
-            .setAverageComputationMethod(BB.AverageComputationMethod.EXPONENTIAL_MOVING_AVERAGE)
-            .setWeight(BigDecimal.valueOf(2D / (3D + 1D)))
-            .setDevFactor(2)
-            .build()
-            .create(),
-        BB.toBuilder()
-            .setAverageComputationMethod(BB.AverageComputationMethod.SIMPLE_MOVING_AVERAGE)
-            .setDevFactor(2)
-            .build()
             .create());
   }
 }
