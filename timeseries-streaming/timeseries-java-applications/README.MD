@@ -20,70 +20,27 @@ public [Band Protocol](https://bandprotocol.com) data in Google Cloud Platform.
     * `cd dataflow-sample-applications/timeseries-streaming/timeseries-java-applications/`
     * `./gradlew build`
     
-## Creating metrics from a stream
 
- * example_1 : In this mode the metrics generated are sent to output as logs.
- * example_2 : In this mode the metrics generated are sent to BigQuery and Pub/Sub.
+## Bootstrap of metrics to BigQuery
 
-## Example 1 : Output of metrics to LOG
-
-This example will spin up a local pipeline using the Direct Runner, the metrics will be output to log files.
-
-Create a Pub/Sub subscription for Band Protocol oracle requests:
-
-```bash
-gcloud pubsub subscriptions create crypto_band.oracle_requests.subscription0 --topic=crypto_band.oracle_requests --topic-project=band-etl-dev
-```
-
-Start the pipeline:  
-   
-```     
-PROJECT=$(gcloud config get-value project 2> /dev/null)
-./gradlew run_band_example --args="\
-    --runner=DirectRunner \
-    --enablePrintMetricsToLogs \
-    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.subscription0 \
-    --typeOneComputationsLengthInSecs=5 \
-    --typeTwoComputationsLengthInSecs=60 \
-    --sequenceLengthInSeconds=60 \
-"
-```
-
-You will see several messages about incomplete TSAccumSequences, once there is enough data, usually 5 minutes, 
-you will see values output to the logs. To stop you can use CTRL-C.
-
-You can customize window size and the 
-
-## Example 2 : Output of metrics to BigQuery and Pub/Sub
-
----
-***NOTE***
-The following examples will use resources on your Google Cloud Platform account, which will incur costs. 
----
-
-* In order to run this example you will need to set up a BigQuery [dataset](https://cloud.google.com/bigquery/docs/datasets-intro) that your local environment will send data to.
-* You will need to be authenticated as a user account to run this sample [BigQuery Authentication](https://cloud.google.com/bigquery/docs/authentication)
-
-Create a BigQuery table:
-
-```bash        
-DATASET_NAME=band_analytics
-bq --location=US mk --dataset $DATASET_NAME 
-``` 
+The [BandDataBootstrapGenerator](BandExamples/src/main/java/io/blockchainetl/band/examples/simpledata/transforms/BandDataBootstrapGenerator.java) 
+pipeline allows you to calculate metrics for historical oracle requests.
+The data is sourced from `crypto_band.oracle_requests` table in BigQuery.
 
 Run the pipeline:
 
 ``` 
-PROJECT=$(gcloud config get-value project 2> /dev/null)   
-TOPIC_NAME=band_analytics.metrics
-DATASET_NAME=band_analytics
-TABLE_NAME=metrics
-
-./gradlew run_band_example --args="\
-    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.subscription0 \
-    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
-    --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
+PROJECT=$(gcloud config get-value project 2> /dev/null)    
+# Make sure to update the date to yesterday's date
+TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"   
+DATASET_NAME=crypto_band
+TEMP_BUCKET=dataflow-temp0
+  
+./gradlew generate_band_bootstrap_data --args="\
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
+    --timestampThreshold="$TIMESTAMP_THRESHOLD" \
     --runner=DataflowRunner \
+    --tempLocation=gs://$TEMP_BUCKET/temp \
     --maxNumWorkers=1 \
     --region=us-central1 \
 "
@@ -118,40 +75,27 @@ ORDER BY
   DATA.metric
 ```
 
-## Bootstrap of metrics to BigQuery
+## Calculating metrics from a Pub/Sub stream
 
-The BandDataBootstrapGenerator pipeline allows you to calculate metrics for historical oracle requests.
-The data is sourced from `crypto_band.oracle_requests` table in BigQuery.
+The [BandDataStreamGenerator](BandExamples/src/main/java/io/blockchainetl/band/examples/simpledata/transforms/BandDataStreamGenerator.java) 
+pipeline allows you to calculate metrics for oracle requests pulled from a Pub/Sub subscription. It will output
+the result to the specified BigQuery table and Pub/Sub topic.
 
-Run the pipeline:
+Create a Pub/Sub subscription for Band Protocol oracle requests:
 
-``` 
-PROJECT=$(gcloud config get-value project 2> /dev/null) 
-TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"   
-DATASET_NAME=band_analytics
-  
-./gradlew generate_band_bootstrap_data --args="\
-    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
-    --timestampThreshold="$TIMESTAMP_THRESHOLD" \
-    --runner=DataflowRunner \
-    --tempLocation=gs://dataflow-temp0/temp \
-    --maxNumWorkers=1 \
-    --region=us-central1 \
-"
-```  
+```bash
+gcloud pubsub subscriptions create crypto_band.oracle_requests.metrics \
+    --topic=crypto_band.oracle_requests \
+    --topic-project=band-etl
+```
 
-Use the same `--timestampThreshold` and `--bigQueryTableForTSAccumOutputLocation` when 
-running the streaming `run_band_example` pipeline, e.g.:
+Start the pipeline in Dataflow:
 
 ``` 
-PROJECT=$(gcloud config get-value project 2> /dev/null)   
-TOPIC_NAME=band_analytics.metrics   
-TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"   
-DATASET_NAME=band_analytics
-TABLE_NAME=metrics
+TOPIC_NAME=crypto_band.metrics   
 
 ./gradlew run_band_example --args="\
-    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.subscription0 \
+    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.metrics \
     --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
     --timestampThreshold="$TIMESTAMP_THRESHOLD" \
     --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
@@ -161,7 +105,36 @@ TABLE_NAME=metrics
     --diskSizeGb=30 \
     --region=us-central1 \
 "
-``` 
+```
+
+## Output of metrics to LOG for testing
+
+This example will spin up a local pipeline using the Direct Runner, the metrics will be output to log files.
+
+Create a Pub/Sub subscription for Band Protocol oracle requests:
+
+```bash
+gcloud pubsub subscriptions create crypto_band.oracle_requests.metrics.test0 \
+    --topic=crypto_band.oracle_requests \
+    --topic-project=band-etl-dev
+```
+
+Start the pipeline:  
+   
+```     
+PROJECT=$(gcloud config get-value project 2> /dev/null)
+./gradlew run_band_example --args="\
+    --runner=DirectRunner \
+    --enablePrintMetricsToLogs \
+    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.metrics.test0 \
+    --typeOneComputationsLengthInSecs=5 \
+    --typeTwoComputationsLengthInSecs=60 \
+    --sequenceLengthInSeconds=60 \
+"
+```
+
+You will see several messages about incomplete TSAccumSequences, once there is enough data, usually 5 minutes, 
+you will see values output to the logs. To stop you can use CTRL-C.
 
 ---
 
