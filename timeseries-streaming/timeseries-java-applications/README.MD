@@ -79,12 +79,13 @@ TOPIC_NAME=band_analytics.metrics
 DATASET_NAME=band_analytics
 TABLE_NAME=metrics
 
-./gradlew run_band_example --args="\     
+./gradlew run_band_example --args="\
     --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.subscription0 \
     --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
     --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
     --runner=DataflowRunner \
     --maxNumWorkers=1 \
+    --region=us-central1 \
 "
 ```     
 
@@ -140,7 +141,27 @@ DATASET_NAME=band_analytics
 ```  
 
 Use the same `--timestampThreshold` and `--bigQueryTableForTSAccumOutputLocation` when 
-running the streaming `run_band_example` pipeline.  
+running the streaming `run_band_example` pipeline, e.g.:
+
+``` 
+PROJECT=$(gcloud config get-value project 2> /dev/null)   
+TOPIC_NAME=band_analytics.metrics   
+TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"   
+DATASET_NAME=band_analytics
+TABLE_NAME=metrics
+
+./gradlew run_band_example --args="\
+    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.subscription0 \
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
+    --timestampThreshold="$TIMESTAMP_THRESHOLD" \
+    --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
+    --runner=DataflowRunner \
+    --maxNumWorkers=1 \
+    --workerMachineType=n1-standard-1 \
+    --diskSizeGb=30 \
+    --region=us-central1 \
+"
+``` 
 
 ---
 

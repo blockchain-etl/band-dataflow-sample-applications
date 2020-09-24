@@ -76,6 +76,7 @@ public class BandDataStreamGenerator {
      * ***********************************************************************************************************
      */
 
+    final String timestampThreshold = options.getTimestampThreshold();
     PCollection<TSDataPoint> stream =
         p.apply("PubSubListener", PubsubIO.readStrings()
             .fromSubscription(options.getPubSubSubscriptionForOracleRequests())
@@ -91,8 +92,9 @@ public class BandDataStreamGenerator {
                         OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
                         ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
                         boolean skip = false;
-                        if (options.getTimestampThreshold() != null) {
-                          ZonedDateTime thresholdZonedDateTime = TimeUtils.parseDateTime(options.getTimestampThreshold());
+                        if (timestampThreshold != null) {
+                          ZonedDateTime thresholdZonedDateTime = TimeUtils.parseDateTime(
+                              timestampThreshold);
                           
                           if (zonedDateTime.isBefore(thresholdZonedDateTime)) {
                             skip = true;
@@ -109,7 +111,7 @@ public class BandDataStreamGenerator {
 
                       @Override
                       public Duration getAllowedTimestampSkew() {
-                        return Duration.standardMinutes(5);
+                        return Duration.standardDays(2);
                       }
                     }));
 
