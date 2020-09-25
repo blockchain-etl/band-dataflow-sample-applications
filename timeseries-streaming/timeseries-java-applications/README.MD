@@ -27,17 +27,29 @@ The [BandDataBootstrapGenerator](BandExamples/src/main/java/io/blockchainetl/ban
 pipeline allows you to calculate metrics for historical oracle requests.
 The data is sourced from `crypto_band.oracle_requests` table in BigQuery.
 
-Run the pipeline:
 
-``` 
+Initialize variables:
+
+```bash
 PROJECT=$(gcloud config get-value project 2> /dev/null)    
 # Make sure to update the date to yesterday's date
-TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"   
+TIMESTAMP_THRESHOLD="2020-09-24T00:00:00.0Z"   
 DATASET_NAME=crypto_band
-TEMP_BUCKET=dataflow-temp0
-  
+TABLE_NAME=metrics
+TEMP_BUCKET=band-etl-dataflow-temp0
+```
+
+Create a BigQuery dataset:
+
+```bash        
+bq --location=US mk --dataset $DATASET_NAME 
+``` 
+
+Run the pipeline:
+
+```   
 ./gradlew generate_band_bootstrap_data --args="\
-    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.metrics \
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
     --timestampThreshold="$TIMESTAMP_THRESHOLD" \
     --runner=DataflowRunner \
     --tempLocation=gs://$TEMP_BUCKET/temp \
@@ -86,7 +98,7 @@ Create a Pub/Sub subscription for Band Protocol oracle requests:
 ```bash
 gcloud pubsub subscriptions create crypto_band.oracle_requests.metrics \
     --topic=crypto_band.oracle_requests \
-    --topic-project=band-etl
+    --topic-project=public-data-finance
 ```
 
 Start the pipeline in Dataflow:
@@ -116,7 +128,7 @@ Create a Pub/Sub subscription for Band Protocol oracle requests:
 ```bash
 gcloud pubsub subscriptions create crypto_band.oracle_requests.metrics.test0 \
     --topic=crypto_band.oracle_requests \
-    --topic-project=band-etl-dev
+    --topic-project=public-data-finance
 ```
 
 Start the pipeline:  
