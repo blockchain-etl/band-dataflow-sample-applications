@@ -9,17 +9,26 @@ pipeline and delivered to an auto encoder - decoder.
 
 It is not intended to demonstrate cutting edge ML model techniques. 
 
-The sample data is very simple repeating pattern, effectively making any train / eval / test void as the data will 
-simply repeat across all samples.  
-
 In these samples we are using FIRST and LAST in the learning, and the outlier test, this is for demonstration purposes 
 but is not correct given the library aggregates all data using the type 1 computations. The artificial data used happens 
 to have two values per 'tick' so this works ok here. In future samples we will make use of MAX / MIN, and the other 
 aggregations with more complex data.   
 
-TODO explain outliers, bootstrapping and filling gaps with data examples
+TODO explain outliers, bootstrapping and filling gaps with data examples.
 
 ----
+
+```
+TIMESTAMP_THRESHOLD="2020-09-23T00:00:00.0Z"
+./gradlew generate_band_bootstrap_data --args="\
+    --interchangeLocation=gs://dataflow-temp0/dataflow2/simple0 \
+    --timestampThreshold="$TIMESTAMP_THRESHOLD" \
+    --runner=DataflowRunner \
+    --tempLocation=gs://dataflow-temp0/temp \
+    --maxNumWorkers=1 \
+    --region=us-central1 \
+"
+```
 
 ## Using TF.Example's using a Tensor Flow Extended (TFX) pipeline
 
