@@ -50,10 +50,10 @@ def preprocessing_fn(inputs: Dict[Text, Any]) -> Dict[Text, Any]:
         values = features[feature].values
         if values.dtype == tf.float32:
             # TODO parametrize once supported
-            if feature.endswith("-FIRST") or feature.endswith("-LAST"):
+            if (feature.endswith("-FIRST") or feature.endswith("-LAST")) and (feature.startswith("ETH-")):
                 train_float32_x_labels.append(feature)
-        if values.dtype == tf.int64:
-            train_int64_x_labels.append(feature)
+        # if values.dtype == tf.int64:
+        #     train_int64_x_labels.append(feature)
 
     # The features are sorted in Lexicographical order, the inference will use this same sort.
     train_float32_x_labels.sort()
@@ -71,9 +71,9 @@ def preprocessing_fn(inputs: Dict[Text, Any]) -> Dict[Text, Any]:
     float32 = tf.reshape(
             tf.stack(train_float32_x_values, axis=1),
             [-1, timesteps, len(train_float32_x_values)])
-    int64 = tf.reshape(
-            tf.stack(train_int64_x_values, axis=1),
-            [-1, timesteps, len(train_int64_x_values)])
+    # int64 = tf.reshape(
+    #         tf.stack(train_int64_x_values, axis=1),
+    #         [-1, timesteps, len(train_int64_x_values)])
 
     # AutoEncoder / AutoDecoder requires label == data
     outputs = {"Float32": float32, "LABEL": float32}

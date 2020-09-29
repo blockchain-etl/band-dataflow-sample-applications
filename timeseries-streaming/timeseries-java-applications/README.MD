@@ -1,77 +1,65 @@
 # Quickstart
 
-In this section we will walk through downloading the sample and running through
-a few examples using gradle.
+This repository contains code for running [Dataflow](https://cloud.google.com/dataflow) pipelines for processing 
+public [Band Protocol](https://bandprotocol.com) data in Google Cloud Platform.  
+
+- **Metrics calculation** - price feeds from [Aggregator](https://guanyu-poa.cosmoscan.io/oracle-script/8) oracle script 
+    are aggregated into windows and the following metrics are calculated for each symbol:
+    - Open, High, Low, Close (OHLC)
+    - Simple Moving Average (SMA)
+    - Exponential Moving Average (EMA)
+    - Relative Strength (RS)
+    - Relative Strength Indicator (RSI)
 
 ## Setup
+
 * Install
-    * You will need to have gradle already installed.
-    * Download the repository, git clone https://github.com/GoogleCloudPlatform/dataflow-sample-applications.git
+    * You will need to have `gcloud` and `gradle` already installed.
+    * Download the repository, `git clone https://github.com/blockchain-etl/band-dataflow-sample-applications`.
 * Build
-    * cd dataflow-sample-applications/timeseries-streaming/timeseries-java-applications/
-    * ./gradlew build
-## Creating metrics from a stream
-The following commands will run an example pipeline which uses a generated stream of data. While the pipeline is 
-running 1 tick happens every 500 ms, the function will produce a repeating wave of data. [SimpleDataStreamGenerator class](SyntheticExamples/src/main/java/com/google/dataflow/sample/timeseriesflow/examples/simpledata/transforms/SimpleDataStreamGenerator.java) contains the code that will be run. 
+    * `cd dataflow-sample-applications/timeseries-streaming/timeseries-java-applications/`
+    * `./gradlew build`
+    
 
-The simple data usage is to demonstrate the end to end data engineering of the library. From, time series pre-processing to model creation using TFX.
- 
- [SimpleDataStreamGenerator class](SyntheticExamples/src/main/java/com/google/dataflow/sample/timeseriesflow/examples/simpledata/transforms/SimpleDataStreamGenerator.java) has four modes:
- 
- * example_1 : In this mode the metrics generated are sent to output as logs.
- * example_2 : In this mode the metrics generated are sent to output as TFExamples to a file system.
- * example_3 : In this mode the metrics generated are sent to output as rows to BigQuery
- * example_4 : In this mode the metrics generated are sent to output as Json string to PubSub
+## Bootstrap of metrics to BigQuery
 
-## Example 1 : Output of metrics to LOG
+The [BandDataBootstrapGenerator](BandExamples/src/main/java/io/blockchainetl/band/examples/simpledata/transforms/BandDataBootstrapGenerator.java) 
+pipeline allows you to calculate metrics for historical oracle requests.
+The data is sourced from `crypto_band.oracle_requests` table in BigQuery.
 
-This example will spin up a local pipeline using the Direct Runner, the metrics will be output to log files.
-   
-```
-./gradlew run_example --args='--enablePrintMetricsToLogs'
-```
 
-You will see several messages about incomplete TSAccumSequences, once there is enough data, which is 5 secs of data, you will see values output to the logs. To stop you can use CTRL-C.
+Initialize variables:
 
-To start the demo with outlier data included in the stream, which is a value outside of the norm every 50 ticks.
-
-```
-./gradlew run_example --args='--enablePrintMetricsToLogs --withOutliers=true'
+```bash
+PROJECT=$(gcloud config get-value project 2> /dev/null)    
+# Make sure to update the date to yesterday's date
+TIMESTAMP_THRESHOLD="2020-09-24T00:00:00.0Z"   
+DATASET_NAME=crypto_band
+TABLE_NAME=metrics
+TEMP_BUCKET=band-etl-dataflow-temp0
 ```
 
-## Example 2 : Creation of TF.Example's from a stream with output to files
-### Setup directory
-The files will need a location to be output to, in the below example we use /tmp/simple-data/
-```
-mkdir /<your-directory>/simple-data
-./gradlew run_example --args='--enablePrintMetricsToLogs --interchangeLocation=/<your-directory>/simple-data/'
-```
+Create a BigQuery dataset:
 
-Check the folder you specified in --interchangeLocation for new files.
+```bash        
+bq --location=US mk --dataset $DATASET_NAME 
+``` 
 
-To start the demo with outlier data included in the stream, which is a value outside of the norm every 50 ticks.
+Run the pipeline:
 
-```
-./gradlew run_example --args='--enablePrintMetricsToLogs --interchangeLocation=/<your-directory>/simple-data/ --withOutliers=true'
-```
-  
-## Example 3 : Example Output of metrics to BigQuery
+```   
+./gradlew generate_band_bootstrap_data --args="\
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
+    --timestampThreshold="$TIMESTAMP_THRESHOLD" \
+    --runner=DataflowRunner \
+    --tempLocation=gs://$TEMP_BUCKET/temp \
+    --maxNumWorkers=1 \
+    --region=us-central1 \
+"
+```     
 
----
-***NOTE***
-The following examples will use resources on your Google Cloud Platform account, which will incur costs. 
----
-
-* In order to run this example you will need setup a BigQuery [dataset](https://cloud.google.com/bigquery/docs/datasets-intro) that your local environment will send data to.
-* You will need to be authenticated as a user account to run this sample [BigQuery Authentication](https://cloud.google.com/bigquery/docs/authentication)
-
-In the command below, replace <project> with your projectid and give a table prefix which the code will use when creating the table. 
-
-
-```
-./gradlew run_example --args='--bigQueryTableForTSAccumOutputLocation=<project>:<dataset>.<table_prefix>'
-```
 You can observe the results by running the following SQL command in BigQuery.
+
 ```
 SELECT
   lower_window_boundary,
@@ -99,17 +87,67 @@ ORDER BY
   DATA.metric
 ```
 
-To start the demo with outlier data included in the stream, which is a value outside of the norm every 50 ticks.
+## Calculating metrics from a Pub/Sub stream
 
+The [BandDataStreamGenerator](BandExamples/src/main/java/io/blockchainetl/band/examples/simpledata/transforms/BandDataStreamGenerator.java) 
+pipeline allows you to calculate metrics for oracle requests pulled from a Pub/Sub subscription. It will output
+the result to the specified BigQuery table and Pub/Sub topic.
+
+Create a Pub/Sub subscription for Band Protocol oracle requests:
+
+```bash
+gcloud pubsub subscriptions create crypto_band.oracle_requests.metrics \
+    --topic=crypto_band.oracle_requests \
+    --topic-project=public-data-finance
 ```
-./gradlew run_example --args='--bigQueryTableForTSAccumOutputLocation=<project>:<dataset>.<table_prefix> --withOutliers=true'
+
+Start the pipeline in Dataflow:
+
+``` 
+TOPIC_NAME=crypto_band.metrics   
+
+./gradlew run_band_example --args="\
+    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.metrics \
+    --bigQueryTableForTSAccumOutputLocation=$PROJECT:$DATASET_NAME.$TABLE_NAME \
+    --timestampThreshold="$TIMESTAMP_THRESHOLD" \
+    --pubSubTopicForTSAccumOutputLocation=projects/$PROJECT/topics/$TOPIC_NAME \
+    --runner=DataflowRunner \
+    --maxNumWorkers=1 \
+    --workerMachineType=n1-standard-1 \
+    --diskSizeGb=30 \
+    --region=us-central1 \
+"
 ```
 
-## Example 4 : Sending a stream of examples to PubSub
+## Output of metrics to LOG for testing
 
-In this example the values are sent to PubSub and the interchangeLocation. The data sent to PubSub is parsed into JSON format.
+This example will spin up a local pipeline using the Direct Runner, the metrics will be output to log files.
 
+Create a Pub/Sub subscription for Band Protocol oracle requests:
+
+```bash
+gcloud pubsub subscriptions create crypto_band.oracle_requests.metrics.test0 \
+    --topic=crypto_band.oracle_requests \
+    --topic-project=public-data-finance
 ```
-./gradlew run_example --args='--withOutliers=true --pubSubTopicForTSAccumOutputLocation=projects/<your-project>/topics/outlier-detection'
 
+Start the pipeline:  
+   
+```     
+PROJECT=$(gcloud config get-value project 2> /dev/null)
+./gradlew run_band_example --args="\
+    --runner=DirectRunner \
+    --enablePrintMetricsToLogs \
+    --pubSubSubscriptionForOracleRequests=projects/$PROJECT/subscriptions/crypto_band.oracle_requests.metrics.test0 \
+    --typeOneComputationsLengthInSecs=5 \
+    --typeTwoComputationsLengthInSecs=60 \
+    --sequenceLengthInSeconds=60 \
+"
 ```
+
+You will see several messages about incomplete TSAccumSequences, once there is enough data, usually 5 minutes, 
+you will see values output to the logs. To stop you can use CTRL-C.
+
+---
+
+For more example pipelines refer to this repository https://github.com/GoogleCloudPlatform/dataflow-sample-applications/tree/master/timeseries-streaming/timeseries-java-applications.

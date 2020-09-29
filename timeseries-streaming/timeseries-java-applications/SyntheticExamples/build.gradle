@@ -18,7 +18,6 @@
 plugins {
     id 'java'
     id 'idea'
-    id "com.diffplug.gradle.spotless" version "3.24.2"
 }
 
 sourceCompatibility = 1.8
@@ -29,17 +28,9 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
 }
 
-// Enable code formatting
-spotless {
-    java {
-        licenseHeaderFile '../Apache_Licence_For_Spotless'
-        googleJavaFormat('1.7')
-    }
-}
-
 task run_example(type: JavaExec) {
     classpath sourceSets.main.runtimeClasspath
-    main = "com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.SimpleDataStreamGenerator"
+    main = "com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms.BandDataStreamGenerator"
     group = "samples"
 }
 

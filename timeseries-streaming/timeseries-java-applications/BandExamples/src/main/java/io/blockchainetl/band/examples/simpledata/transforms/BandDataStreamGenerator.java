@@ -15,50 +15,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
+package io.blockchainetl.band.examples.simpledata.transforms;
 
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.Data;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSAccumSequence;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSKey;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToPubSub;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
-import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
-import com.google.protobuf.util.Timestamps;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.JsonUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.TimeUtils;
 import org.apache.beam.sdk.Pipeline;
-import org.apache.beam.sdk.io.GenerateSequence;
+import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tensorflow.example.Example;
 
-import java.util.Optional;
-import java.util.concurrent.ThreadLocalRandom;
+import java.time.ZonedDateTime;
+
+import static io.blockchainetl.band.examples.simpledata.transforms.utils.BandUtils.setDefaultOptions;
 
 /**
  * This simple example data is used only to demonstrate the end to end data engineering of the
  * library from, timeseries pre-processing to model creation using TFX.
- *
- * <p>The generated data will predictably rise and fall with time.
- *
- * <p>This demo has three modes:
- *
- * <p>example_1: In this mode the metrics are generated and output as logs.
- *
- * <p>example_2: In this mode the metrics are generated and output to the file system.
- *
- * <p>example_3: In this mode the metrics are generated and output to BigQuery.
- *
- * <p>example_4: In this mode the metrics are generated and output to PubSub.
  */
-public class SimpleDataStreamGenerator {
+public class BandDataStreamGenerator {
+
+  private static final Logger LOG = LoggerFactory.getLogger(BandDataStreamGenerator.class);
+
+  private static final String PUBSUB_ID_ATTRIBUTE = "item_id";
 
   public static void main(String[] args) {
 
@@ -67,13 +61,10 @@ public class SimpleDataStreamGenerator {
      * We hard code a few of the options for this sample application.
      * ***********************************************************************************************************
      */
-    SimpleDataOptions options = PipelineOptionsFactory.fromArgs(args).as(SimpleDataOptions.class);
+    BandDataOptions options = PipelineOptionsFactory.fromArgs(args).as(BandDataOptions.class);
 
-    options.setAppName("SimpleDataStreamTSDataPoints");
-    options.setTypeOneComputationsLengthInSecs(1);
-    options.setTypeTwoComputationsLengthInSecs(5);
-    options.setSequenceLengthInSeconds(5);
-    options.setTTLDurationSecs(1);
+    options.setAppName("BandDataStreamTSDataPoints");
+    setDefaultOptions(options);
 
     Pipeline p = Pipeline.create(options);
 
@@ -83,64 +74,50 @@ public class SimpleDataStreamGenerator {
      * cycle through 0 up and then back to 0. There will be a tick every 500 ms.
      * ***********************************************************************************************************
      */
-    TSKey key = TSKey.newBuilder().setMajorKey("timeseries_x").setMinorKeyString("value").build();
 
-    boolean outlierEnabled = Optional.ofNullable(options.getWithOutliers()).orElse(false);
-
+    final String timestampThreshold = options.getTimestampThreshold();
     PCollection<TSDataPoint> stream =
-        p.apply(GenerateSequence.from(0).withRate(1, Duration.millis(500)))
+        p.apply("PubSubListener", PubsubIO.readStrings()
+            .fromSubscription(options.getPubSubSubscriptionForOracleRequests())
+            .withIdAttribute(PUBSUB_ID_ATTRIBUTE))
             .apply(
                 ParDo.of(
-                    new DoFn<Long, TSDataPoint>() {
+                    new DoFn<String, TSDataPoint>() {
                       @ProcessElement
                       public void process(
-                          @Element Long input,
-                          @Timestamp Instant now,
+                          @Element String input,
                           OutputReceiver<TSDataPoint> o) {
-                        // We use both 50 and 51 so LAST and FIRST values can become outliers
-                        boolean outlier = (outlierEnabled && (input % 50 == 0 || input % 51 == 0));
 
-                        if (outlier) {
-                          System.out.println(String.format("Outlier generated at %s", now));
-                          o.output(
-                              TSDataPoint.newBuilder()
-                                  .setKey(key)
-                                  .setData(
-                                      Data.newBuilder()
-                                          .setDoubleVal(
-                                              ThreadLocalRandom.current().nextDouble(105D, 200D)))
-                                  .setTimestamp(Timestamps.fromMillis(now.getMillis()))
-                                  // This metadata is not reported in this version of the sample.
-                                  .putMetadata("Bad Data", "YES!")
-                                  .build());
-
-                        } else {
-                          o.output(
-                              TSDataPoint.newBuilder()
-                                  .setKey(key)
-                                  .setData(
-                                      Data.newBuilder()
-                                          .setDoubleVal(
-                                              Math.round(
-                                                  Math.sin(Math.toRadians(input % 360))
-                                                      * 10000D)
-                                                  / 100D))
-                                  .setTimestamp(Timestamps.fromMillis(now.getMillis()))
-                                  .build());
+                        OracleRequest oracleRequest = JsonUtils.parseJson(input, OracleRequest.class);
+                        ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
+                        boolean skip = false;
+                        if (timestampThreshold != null) {
+                          ZonedDateTime thresholdZonedDateTime = TimeUtils.parseDateTime(
+                              timestampThreshold);
+                          
+                          if (zonedDateTime.isBefore(thresholdZonedDateTime)) {
+                            skip = true;
+                          }
                         }
+                        
+                        if (!skip) {
+                          for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoints(
+                              oracleRequest)) {
+                            o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
+                          }
+                        }
+                      }
+
+                      @Override
+                      public Duration getAllowedTimestampSkew() {
+                        return Duration.standardDays(2);
                       }
                     }));
 
-    /**
-     * ***********************************************************************************************************
-     * The data has only one key, to allow the type 1 computations to be done in parallel we set the
-     * {@link GenerateComputations#hotKeyFanOut()}
-     * ***********************************************************************************************************
-     */
     GenerateComputations.Builder generateComputations =
         GenerateComputations.fromPiplineOptions(options)
-            .setType1NumericComputations(AllMetricsWithDefaults.getAllType1Combiners())
-            .setType2NumericComputations(AllMetricsWithDefaults.getAllType2Computations());
+            .setType1NumericComputations(BandMetrics.getAllType1Combiners())
+            .setType2NumericComputations(BandMetrics.getAllType2Computations());
 
     /**
      * ***********************************************************************************************************
@@ -165,7 +142,7 @@ public class SimpleDataStreamGenerator {
      */
     AllComputationsExamplePipeline allComputationsExamplePipeline =
         AllComputationsExamplePipeline.builder()
-            .setTimeseriesSourceName("SimpleExample")
+            .setTimeseriesSourceName("BandExample")
             .setGenerateComputations(generateComputations.build())
             .build();
 

@@ -15,86 +15,54 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dataflow.sample.timeseriesflow.examples.simpledata.transforms;
+package io.blockchainetl.band.examples.simpledata.transforms;
 
+import com.google.api.services.bigquery.model.TableRow;
 import com.google.dataflow.sample.timeseriesflow.AllComputationsExamplePipeline;
 import com.google.dataflow.sample.timeseriesflow.ExampleTimeseriesPipelineOptions;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData;
 import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSDataPoint;
-import com.google.dataflow.sample.timeseriesflow.TimeSeriesData.TSKey;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.OutPutTFExampleToFile;
 import com.google.dataflow.sample.timeseriesflow.io.tfexample.TSAccumIterableToTFExample;
-import com.google.dataflow.sample.timeseriesflow.metrics.utils.AllMetricsWithDefaults;
 import com.google.dataflow.sample.timeseriesflow.transforms.GenerateComputations;
 import com.google.dataflow.sample.timeseriesflow.transforms.PerfectRectangles;
-import com.google.protobuf.util.Timestamps;
-import org.apache.beam.runners.dataflow.DataflowRunner;
+import io.blockchainetl.band.examples.simpledata.transforms.domain.OracleRequest;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.JsonUtils;
+import io.blockchainetl.band.examples.simpledata.transforms.utils.TimeUtils;
 import org.apache.beam.sdk.Pipeline;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.transforms.Create;
-import org.apache.beam.sdk.values.TimestampedValue;
-import org.joda.time.Duration;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.values.PCollection;
 import org.joda.time.Instant;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.time.ZonedDateTime;
+
+import static io.blockchainetl.band.examples.simpledata.transforms.utils.BandUtils.setDefaultOptions;
 
 /**
  * This trivial example data is used only to demonstrate the end to end data engineering of the
  * library from, timeseries pre-processing to model creation using TFX.
- *
- * <p>The learning bootstrap data will predictably rise and fall with time.
- *
- * <p>Options that are required for the pipeline:
  */
-public class SimpleDataBootstrapGenerator {
+public class BandDataBootstrapGenerator {
+
+  public static final String BAND_ORACLE_REQUESTS_QUERY = 
+      "SELECT block_timestamp, oracle_request_id, request, decoded_result "
+      + "FROM `band-etl-dev.crypto_band.oracle_requests` "
+      + "WHERE request.oracle_script_id = 8 "
+      + "   AND block_timestamp_truncated < '%s' ";
 
   public static void main(String[] args) {
 
-    // The starting time for the bootstrap data is unimportant for this dataset as the data function
-    // is always the same.
-    Instant now = Instant.parse("2000-01-01T00:00:00");
-
-    List<TimestampedValue<TSDataPoint>> data = new ArrayList<>();
-
-    TSKey key = TSKey.newBuilder().setMajorKey("timeseries_x").setMinorKeyString("value").build();
-
-    /**
-     * ***********************************************************************************************************
-     * Generate trivial data points that follow a very simple pattern. Over 12 hours the value will
-     * cycle through 0 to x and back to 0. There will be a tick every 500 ms.
-     * ***********************************************************************************************************
-     */
-    for (int i = 0; i < 86400; i++) {
-      data.add(
-          TimestampedValue.of(
-              TSDataPoint.newBuilder()
-                  .setKey(key)
-                  .setData(
-                      TimeSeriesData.Data.newBuilder()
-                          .setDoubleVal(
-                              Math.round(Math.sin(Math.toRadians(i % 360)) * 10000D) / 100D))
-                  .setTimestamp(
-                      Timestamps.fromMillis(now.plus(Duration.millis(i * 500)).getMillis()))
-                  .build(),
-              now.plus(Duration.millis(i * 500))));
+    BandDataOptions options =
+        PipelineOptionsFactory.fromArgs(args).as(BandDataOptions.class);
+    
+    options.setAppName("BandDataBootstrapProcessTSDataPoints");
+    setDefaultOptions(options);
+    
+    if (options.getTimestampThreshold() == null) {
+      throw new IllegalArgumentException("timestampThreshold option is required.");
     }
-
-    ExampleTimeseriesPipelineOptions options =
-        PipelineOptionsFactory.fromArgs(args).as(ExampleTimeseriesPipelineOptions.class);
-
-    /**
-     * ***********************************************************************************************************
-     * We hard code a few of the options for this sample application.
-     * ***********************************************************************************************************
-     */
-    options.setAppName("SimpleDataBootstrapProcessTSDataPoints");
-    options.setTypeOneComputationsLengthInSecs(1);
-    options.setTypeTwoComputationsLengthInSecs(5);
-    options.setSequenceLengthInSeconds(5);
-    options.setRunner(DataflowRunner.class);
-    options.setMaxNumWorkers(2);
-    options.setAbsoluteStopTimeMSTimestamp(now.plus(Duration.standardSeconds(43200)).getMillis());
 
     Pipeline p = Pipeline.create(options);
 
@@ -106,8 +74,8 @@ public class SimpleDataBootstrapGenerator {
      */
     GenerateComputations.Builder generateComputations =
         GenerateComputations.fromPiplineOptions(options)
-            .setType1NumericComputations(AllMetricsWithDefaults.getAllType1Combiners())
-            .setType2NumericComputations(AllMetricsWithDefaults.getAllType2Computations());
+            .setType1NumericComputations(BandMetrics.getAllType1Combiners())
+            .setType2NumericComputations(BandMetrics.getAllType2Computations());
 
     /**
      * ***********************************************************************************************************
@@ -132,10 +100,35 @@ public class SimpleDataBootstrapGenerator {
      */
     AllComputationsExamplePipeline allComputationsExamplePipeline =
         AllComputationsExamplePipeline.builder()
-            .setTimeseriesSourceName("SimpleExample")
+            .setTimeseriesSourceName("BandExample")
             .setGenerateComputations(generateComputations.build())
             .build();
 
+    PCollection<TSDataPoint> data =
+        p
+            .apply(
+                "ReadBigQuery",
+                BigQueryIO.readTableRows()
+                    .fromQuery(String.format(BAND_ORACLE_REQUESTS_QUERY, options.getTimestampThreshold()))
+                    .withQueryPriority(BigQueryIO.TypedRead.QueryPriority.INTERACTIVE)
+                    .usingStandardSql())
+            .apply(ParDo.of(
+                new DoFn<TableRow, TSDataPoint>() {
+                  @ProcessElement
+                  public void process(
+                      @Element TableRow input,
+                      OutputReceiver<TSDataPoint> o) {
+
+                    // This is not efficient, convert from TableRow instead.
+                    OracleRequest oracleRequest = JsonUtils.parseJson(JsonUtils.toJson(input), OracleRequest.class);
+                    for (TSDataPoint tsDataPoint : OracleRequestMapper.convertOracleRequestToTSDataPoints(oracleRequest)) {
+                      ZonedDateTime zonedDateTime = TimeUtils.parseDateTime(oracleRequest.getBlock_timestamp());
+                      o.outputWithTimestamp(tsDataPoint, Instant.ofEpochSecond(zonedDateTime.toEpochSecond()));
+                    }
+                  }
+                }));
+
+    
     /**
      * ***********************************************************************************************************
      * All the metrics currently available will be processed for this dataset. The results will be
@@ -148,7 +141,7 @@ public class SimpleDataBootstrapGenerator {
      *
      * <p>***********************************************************************************************************
      */
-    p.apply(Create.timestamped(data))
+    data
         .apply(allComputationsExamplePipeline)
         .apply(new TSAccumIterableToTFExample())
         .apply(OutPutTFExampleToFile.create().withEnabledSingeWindowFile(false));
