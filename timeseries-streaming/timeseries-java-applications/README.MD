@@ -25,18 +25,18 @@ public [Band Protocol](https://bandprotocol.com) data in Google Cloud Platform.
 
 The [BandDataBootstrapGenerator](BandExamples/src/main/java/io/blockchainetl/band/examples/simpledata/transforms/BandDataBootstrapGenerator.java) 
 pipeline allows you to calculate metrics for historical oracle requests.
-The data is sourced from `crypto_band.oracle_requests` table in BigQuery.
+The data is sourced from `public-data-finance.crypto_band.oracle_requests` table in BigQuery.
 
 
-Initialize variables:
+Initialise variables:
 
 ```bash
 PROJECT=$(gcloud config get-value project 2> /dev/null)    
 # Make sure to update the date to yesterday's date
-TIMESTAMP_THRESHOLD="2020-09-24T00:00:00.0Z"   
+TIMESTAMP_THRESHOLD="2020-10-01T07:00:00.0Z"   
 DATASET_NAME=crypto_band
 TABLE_NAME=metrics
-TEMP_BUCKET=band-etl-dataflow-temp0
+TEMP_BUCKET=<replace_with_your_temporary_bucket>
 ```
 
 Create a BigQuery dataset:
@@ -56,7 +56,7 @@ Run the pipeline:
     --maxNumWorkers=1 \
     --region=us-central1 \
 "
-```     
+```
 
 You can observe the results by running the following SQL command in BigQuery.
 
