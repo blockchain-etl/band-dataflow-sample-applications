@@ -210,7 +210,7 @@ public abstract class PerfectRectangles
                 Window.<KV<TSKey, ValueInSingleWindow<TSDataPoint>>>into(new GlobalWindows())
                     .triggering(Repeatedly.forever(AfterProcessingTime.pastFirstElementInPane()))
                     .discardingFiredPanes()
-                    .withAllowedLateness(Duration.standardDays(2)));
+                    .withAllowedLateness(Duration.ZERO));
 
     //     Ensure all output is ordered and gaps are filed and previous values propagated
 
