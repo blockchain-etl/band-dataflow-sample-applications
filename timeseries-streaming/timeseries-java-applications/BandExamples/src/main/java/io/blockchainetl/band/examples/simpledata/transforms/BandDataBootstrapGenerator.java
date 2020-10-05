@@ -48,7 +48,7 @@ public class BandDataBootstrapGenerator {
 
   public static final String BAND_ORACLE_REQUESTS_QUERY = 
       "SELECT block_timestamp, oracle_request_id, request, decoded_result "
-      + "FROM `band-etl-dev.crypto_band.oracle_requests` "
+      + "FROM `public-data-finance.crypto_band.oracle_requests` "
       + "WHERE request.oracle_script_id = 8 "
       + "   AND block_timestamp_truncated < '%s' ";
 
