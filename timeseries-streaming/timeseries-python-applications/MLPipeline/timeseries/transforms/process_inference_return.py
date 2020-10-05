@@ -62,7 +62,7 @@ class ProcessReturn(beam.DoFn):
             if not (f.startswith("METADATA_") or f.startswith("__CONFIG_")):
                 # Current model only uses the Float32 values
                 if len(features[f].float_list.value) > 0:
-                    if f.endswith("-FIRST") or f.endswith("-LAST"):
+                    if (f.endswith("-FIRST") or f.endswith("-LAST")) and (f.startswith("ETH-")):
                         feature_labels.append(f)
         # Sort the values by lexical order
         feature_labels.sort()

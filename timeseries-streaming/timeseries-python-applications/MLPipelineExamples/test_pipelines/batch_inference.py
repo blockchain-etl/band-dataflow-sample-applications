@@ -26,7 +26,7 @@ import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
 from tfx_bsl.public.beam import RunInference
 from tfx_bsl.public.proto import model_spec_pb2
-from timeseries.transforms import process_inference_return
+from timeseries.transforms import process_inference_return, filter_examples
 
 
 def run(args, pipeline_args):
@@ -42,6 +42,7 @@ def run(args, pipeline_args):
                 | 'ReadTFExample' >> beam.io.tfrecordio.ReadFromTFRecord(
                         file_pattern=args.tfrecord_folder)
                 | 'ParseExamples' >> beam.Map(tf.train.Example.FromString)
+                | beam.ParDo(filter_examples.FilterExamples())
                 | RunInference(
                         model_spec_pb2.InferenceSpecType(
                                 saved_model_spec=model_spec_pb2.SavedModelSpec(
